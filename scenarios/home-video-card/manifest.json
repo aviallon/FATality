@@ -34,40 +34,72 @@
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
-   "size": 232795,
-   "sha256": "4714cdd8a2da1def8e4fbca7d89288dd30b33ed0fe4414093ec4fcee3f56d007",
+   "size": 2089359,
+   "sha256": "5b9b81229c2be3d15b26b3d4aa5dbad0bd940bda0b1a8416c66c3351ea1fc057",
    "kind": "file",
    "after_format": false,
    "note": ""
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
-   "size": 232750,
-   "sha256": "e699724c4e814345b0d907e246d815a1c044589e6082e8ddb0b400fc57325aa1",
+   "size": 2090048,
+   "sha256": "2112a237da917b0c16ec768db42e6cb27237255c7211ebc0e521829f5161e27f",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013658.JPG",
+   "size": 2089968,
+   "sha256": "7a191f091bf31ca16775db88e480df4f179bf1d579326e5519a7711e75b40eef",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013659.JPG",
+   "size": 2089955,
+   "sha256": "7b240147560fd1484c0fe0bd5f790b01e4e199b817f7ef6373fdbf853f1a40a0",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013660.JPG",
+   "size": 2089346,
+   "sha256": "94ae8b584fe9d185a78d6d759505b1327b8ddb144caece0d1fd125cfba8756b0",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013661.JPG",
+   "size": 2089652,
+   "sha256": "aa9e8d037603a4df8bcc11bafbe4fa399df0c8912cafe35a6a6fc45ce157c34a",
    "kind": "file",
    "after_format": false,
    "note": ""
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.JPG",
-   "size": 232656,
-   "sha256": "b28138dc9e597995f6bcaec04d2274a0e51dd3f0b0e3229acef7f3d4fffde500",
+   "size": 2089692,
+   "sha256": "f2d7cf1c7e258e538b27d6ee05e9c4939f8f0087209223a88ae0b41b752d8fd9",
    "kind": "file",
    "after_format": false,
    "note": ""
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
-   "size": 21642,
-   "sha256": "9382fc9cacf8a112b96d68e4171697594b506c15530bfcff8b2cfbfb40e764d9",
+   "size": 2794599,
+   "sha256": "1bbca0ee3f966d834f1c35d4cc09a714f7a6298ddbfab6cd8d26b94bdcf98ebc",
    "kind": "file",
    "after_format": false,
    "note": ""
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
-   "size": 35920,
-   "sha256": "8c042fa3acfa364057be878b7b5ecebf9c34de5a7fa1d6c30feafc924f431cad",
+   "size": 7491436,
+   "sha256": "ccde6cea938f3e1a4f77e0fb477f9838dd42f0c59fbdd171efcba11d92632413",
    "kind": "file",
    "after_format": false,
    "note": ""
@@ -162,8 +194,8 @@
   },
   {
    "path": "postformat/DCIM/NEWPHOTO.JPG",
-   "size": 232563,
-   "sha256": "89cd719702b4028f9ea0037957089631af45c348b1ef59724f9a6e4dc81a9ecf",
+   "size": 205481,
+   "sha256": "00aa2e1e77e8d39c737841c6219a27c838baed54fc7fd989b9cfcc0d7e84e8a8",
    "kind": "file",
    "after_format": true,
    "note": ""

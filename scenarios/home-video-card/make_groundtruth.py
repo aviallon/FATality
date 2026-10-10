@@ -24,7 +24,7 @@ from PIL import Image
 SCEN = Path(__file__).resolve().parent
 
 
-def jpeg(seed: int, size=(640, 480), quality=85) -> bytes:
+def jpeg(seed: int, size=(1920, 1440), quality=85) -> bytes:
     rng = np.random.default_rng(seed)
     arr = rng.integers(0, 256, (size[1], size[0], 3), dtype=np.uint8)
     buf = io.BytesIO()
@@ -32,10 +32,10 @@ def jpeg(seed: int, size=(640, 480), quality=85) -> bytes:
     return buf.getvalue()
 
 
-def mp4(path: Path, seconds: int = 2) -> None:
+def mp4(path: Path, seconds: int = 8) -> None:
     subprocess.run([
         'ffmpeg', '-y', '-v', 'error', '-f', 'lavfi',
-        '-i', f'testsrc=size=320x240:rate=30:duration={seconds}',
+        '-i', f'testsrc2=size=1280x720:rate=30:duration={seconds}',
         '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-preset', 'ultrafast',
         str(path)], check=True)
 
@@ -49,13 +49,19 @@ def main() -> None:
               pf / 'LOST.DIR'):
         d.mkdir(parents=True, exist_ok=True)
 
-    # GoPro-style media
+    # GoPro-style media — REALISTIC sizes (2-3MB photos): the ground truth
+    # must dwarf the post-format usage, or every survivor gets clobbered and
+    # the scenario measures destruction instead of recovery.
     (gopro / 'GOPR3655.JPG').write_bytes(jpeg(1))
     (gopro / 'G0013656.JPG').write_bytes(jpeg(2))
     (gopro / 'G0013657.JPG').write_bytes(jpeg(3))
+    (gopro / 'G0013658.JPG').write_bytes(jpeg(5))
+    (gopro / 'G0013659.JPG').write_bytes(jpeg(6))
+    (gopro / 'G0013660.JPG').write_bytes(jpeg(7))
+    (gopro / 'G0013661.JPG').write_bytes(jpeg(8))
     (gopro / 'GOPR3655.THM').write_bytes(jpeg(4, size=(160, 120), quality=70))
     mp4(gopro / 'GOPR3655.MP4')
-    mp4(gopro / 'GOPR3655.LRV.MP4', seconds=1)
+    mp4(gopro / 'GOPR3655.LRV.MP4', seconds=3)
 
     # text metadata (LFN + short names)
     (misc / 'VERSION.TXT').write_bytes(b'{"info version":"2.0","camera type":"SYNTHETIC"}\n')
@@ -65,11 +71,12 @@ def main() -> None:
     (gt / 'MUSIC' / 'track.mp3').write_bytes(b'\xff\xfb\x90\x00' + bytes(2048))
     (gt / 'Alarms' / 'alarm.mp3').write_bytes(b'\xff\xfb\x90\x00' + bytes(1024))
 
-    # post-format usage (clobbers the old data area like real usage does)
+    # post-format usage (clobbers the old data area like real usage does) —
+    # kept SMALL on purpose: it must eat only the first cluster or two
     (pf / 'Android' / 'data' / 'nomedia').write_bytes(b'')
     (pf / 'LOST.DIR' / 'placeholder').write_bytes(b'android wrote me after the format')
     (pf / 'DCIM' / 'NEWPHOTO.JPG').parent.mkdir(parents=True, exist_ok=True)
-    (pf / 'DCIM' / 'NEWPHOTO.JPG').write_bytes(jpeg(9))
+    (pf / 'DCIM' / 'NEWPHOTO.JPG').write_bytes(jpeg(9, size=(640, 480), quality=80))
 
     print('ground truth written under', SCEN)
     print('now: python tools/scenario.py manifest scenarios/home-video-card')
