@@ -48,18 +48,8 @@ assign letter=W
 "@ | diskpart
 if ($LASTEXITCODE -ne 0) { throw "diskpart (create/format) failed" }
 Start-Sleep -Seconds 2
-
-# SD-card semantics: Windows' format/delete issues a sanitize UNMAP across
-# the partition and the VHD driver turns discard into zero writes — which
-# would erase everything quick format is supposed to leave behind (real SD
-# cards keep the data; that is the whole premise of recovery). Disable
-# delete-notify (TRIM) so format/delete only touch metadata, like on SD.
-fsutil behavior set disabledeletenotify 1
-if ($LASTEXITCODE -ne 0) { throw "fsutil setDisableDeleteNotify failed" }
-fsutil behavior query disabledeletenotify
-Log "vhd created and FAT32-formatted (windows format, TRIM disabled)"
-
 if (-not (Test-Path 'W:\')) { throw 'drive W: was not assigned' }
+Log "vhd created and FAT32-formatted (windows format)"
 
 # ---- 2. ground truth + manifest -------------------------------------------
 Copy-Item -Recurse -Force (Join-Path $gt '*') 'W:\'
@@ -71,7 +61,46 @@ foreach ($f in $doomed) {
     if (Test-Path "W:\$f") { Remove-Item -Force "W:\$f"; Log "deleted pre-format: $f" }
 }
 
-# ---- 4. QUICK FORMAT (the destructive event under test) -------------------
+# ---- 4. pre-format snapshot + QUICK FORMAT (the destructive event) ---------
+# Windows may sanitize (UNMAP -> zero) the whole volume even in quick mode;
+# the snapshot is what tools/scenario.py composite layers back over the
+# zeroed clusters (data only — FATs/root keep their format semantics).
+$prefmt = Join-Path $OutDir 'image-prefmt.vfat'
+@"
+select vdisk file="$vhd"
+detach vdisk
+"@ | diskpart
+if ($LASTEXITCODE -ne 0) { throw 'diskpart (detach for snapshot) failed' }
+Start-Sleep -Seconds 2
+
+$vhdSize = (Get-Item $vhd).Length
+$rawSize = $vhdSize - 512
+function Copy-RawVhd([string]$src, [string]$dst, [long]$bytes) {
+    $in = [IO.File]::OpenRead($src)
+    $outf = [IO.File]::Create($dst)
+    $buf = New-Object byte[] (8MB)
+    $left = $bytes
+    while ($left -gt 0) {
+        $n = $in.Read($buf, 0, [Math]::Min($buf.Length, $left))
+        if ($n -le 0) { break }
+        $outf.Write($buf, 0, $n)
+        $left -= $n
+    }
+    $in.Close(); $outf.Close()
+}
+Copy-RawVhd $vhd $prefmt $rawSize
+Log "pre-format snapshot written: $prefmt ($rawSize bytes)"
+
+@"
+select vdisk file="$vhd"
+attach vdisk
+select partition 1
+assign letter=W
+"@ | diskpart
+if ($LASTEXITCODE -ne 0) { throw 'diskpart (re-attach) failed' }
+Start-Sleep -Seconds 2
+if (-not (Test-Path 'W:\')) { throw 'drive W: missing after re-attach' }
+
 @"
 select vdisk file="$vhd"
 select partition 1
@@ -96,18 +125,7 @@ Start-Sleep -Seconds 2
 
 $vhdSize = (Get-Item $vhd).Length
 $rawSize = $vhdSize - 512          # fixed VHD footer is the last 512 bytes
-$fsIn  = [IO.File]::OpenRead($vhd)
-$fsOut = [IO.File]::Create($image)
-$fsIn.Seek(0, 'Begin') | Out-Null
-$buf = New-Object byte[] (8MB)
-$left = $rawSize
-while ($left -gt 0) {
-    $n = $fsIn.Read($buf, 0, [Math]::Min($buf.Length, $left))
-    if ($n -le 0) { break }
-    $fsOut.Write($buf, 0, $n)
-    $left -= $n
-}
-$fsIn.Close(); $fsOut.Close()
+Copy-RawVhd $vhd $image $rawSize
 Remove-Item -Force $vhd
-Log "image.vfat written: $rawSize bytes (vhd $vhdSize minus 512B footer)"
+Log "image.vfat written: $rawSize bytes (vhd minus 512B footer)"
 Log "recipe done: $(Get-Date -Format o)"

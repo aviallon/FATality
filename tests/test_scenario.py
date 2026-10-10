@@ -119,3 +119,33 @@ def test_results_json_roundtrip(tmp_path):
     args = type('Args', (), dict(scenario=str(sc), results=str(results),
                                  out=None, tolerance=0.0))
     assert cmd_report(args) == 0          # no baseline -> report-only
+
+
+def test_composite_heals_data_but_not_metadata(tmp_path):
+    """The user's layering idea, with the essential guard: zero-holes in
+    DATA clusters are healed from the pre-format snapshot, but FATs and the
+    root cluster keep their post-format zeros (their zeros ARE the format's
+    semantics — filling them would un-format the image)."""
+    from conftest import DATA_OFF, build_fat32_image
+    from scenario import composite
+    pre = bytearray(build_fat32_image())          # GT state (dirs + files)
+    fmt = bytearray(pre)                          # fake 'formatted+sanitize'
+    fmt[3 * 512:4 * 512] = bytes(512)             # zero FAT2 tail / keep shape
+    # sanitize: wipe the ENTIRE data area incl. root, then write one new
+    # cluster (postformat usage)
+    fmt[DATA_OFF:] = bytes(len(fmt) - DATA_OFF)
+    fmt[DATA_OFF + 2 * 512:DATA_OFF + 3 * 512] = b'NEW-DATA' + bytes(504)
+    p_pre, p_fmt = tmp_path / 'pre.img', tmp_path / 'fmt.img'
+    p_pre.write_bytes(pre)
+    p_fmt.write_bytes(fmt)
+    stats = composite(p_pre, p_fmt, tmp_path / 'out.img')
+    out = (tmp_path / 'out.img').read_bytes()
+    assert stats['healed_clusters'] > 0
+    # data healed: GT payload is back (cluster 5 = 'hello fatality')
+    # and so is a subdirectory listing (clusters >= 3 are fair game)
+    assert b'hello fatality' in out[DATA_OFF:]
+    assert b'OPR0001' in out[DATA_OFF:]      # clu3: deleted-entry name remnant
+    # postformat cluster untouched
+    assert out[DATA_OFF + 2 * 512:DATA_OFF + 2 * 512 + 8] == b'NEW-DATA'
+    # root cluster (2) keeps its formatted zeros: NOT healed
+    assert out[DATA_OFF:DATA_OFF + 32] == bytes(32)

@@ -78,6 +78,49 @@ def sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def composite(pre: Path, fmt: Path, out: Path) -> dict:
+    """Composite a quick-formatted image over its pre-format snapshot.
+
+    Windows' format may sanitize (UNMAP -> zero) the whole volume even in
+    quick mode; real SD cards leave the data area untouched.  Healing rule:
+    for every data cluster >= 3, where the formatted image is ALL ZERO and
+    the pre-format snapshot holds data, fill from the snapshot.
+
+    Metadata (reserved + FATs) and the root cluster are NEVER filled: their
+    post-format zeros are the format's own semantics (cleared FATs/root),
+    and resurrecting them would un-format the image.
+    """
+    import shutil
+
+    from fatality.geometry import scan_geometries
+
+    with open(fmt, 'rb') as f:
+        g = scan_geometries(f, fmt.stat().st_size)[0]
+    cb = g.cluster_bytes
+    total_clusters = g.cluster_count
+    shutil.copyfile(fmt, out)
+    healed = 0
+    healed_bytes = 0
+    with open(pre, 'rb') as fp, open(out, 'r+b') as fo:
+        for c in range(3, total_clusters + 2):
+            off = g.cluster_off(c)
+            fo.seek(off)
+            cur = fo.read(cb)
+            if len(cur) < cb or any(cur):
+                continue                     # formatted image has real data
+            fp.seek(off)
+            old = fp.read(cb)
+            if len(old) < cb or not any(old):
+                continue                     # nothing to heal with
+            fo.seek(off)
+            fo.write(old)
+            healed += 1
+            healed_bytes += cb
+    return dict(cluster_bytes=cb, total_clusters=total_clusters,
+                healed_clusters=healed, healed_bytes=healed_bytes,
+                rule='data clusters >= 3 only; metadata and root untouched')
+
+
 def build_manifest(scenario: Path) -> list[Truth]:
     """Manifest from the groundtruth/ and postformat/ trees."""
     out: list[Truth] = []
@@ -298,6 +341,12 @@ def cmd_report(args) -> int:
     return 0 if comp['verdict'] == 'PASS' else 1
 
 
+def cmd_compose(args) -> int:
+    stats = composite(Path(args.pre), Path(args.formatted), Path(args.out))
+    print(json.dumps(stats, indent=1))
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog='scenario')
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -311,6 +360,12 @@ def main(argv=None) -> int:
     p.add_argument('image')
     p.add_argument('-o', '--out')
     p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser('composite')
+    p.add_argument('pre', help='pre-format snapshot (image-prefmt.vfat)')
+    p.add_argument('formatted', help='quick-formatted image (image.vfat)')
+    p.add_argument('out', help='healed output image')
+    p.set_defaults(fn=cmd_compose)
 
     p = sub.add_parser('report')
     p.add_argument('scenario')

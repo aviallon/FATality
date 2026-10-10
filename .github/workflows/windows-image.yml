@@ -25,6 +25,7 @@ jobs:
         run: |
           cd scenarios/${{ inputs.scenario }}
           gzip -9 -k -f image.vfat
+          if (Test-Path image-prefmt.vfat) { gzip -9 -k -f image-prefmt.vfat }
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -44,6 +45,7 @@ jobs:
           name: ${{ inputs.scenario }}-image
           path: |
             scenarios/${{ inputs.scenario }}/image.vfat.gz
+            scenarios/${{ inputs.scenario }}/image-prefmt.vfat.gz
             scenarios/${{ inputs.scenario }}/recipe-log.txt
             scenarios/${{ inputs.scenario }}/windows-run/results.json
           retention-days: 30
