@@ -119,6 +119,9 @@ class JpegHandler(Handler):
             return res
 
         salvaged, cut = salvage_prefix(data)
+        if b'\xff\xc0' not in salvaged[:4096] and b'\xff\xc2' not in salvaged[:4096]:
+            return ExtractResult(status='phantom',
+                                 notes=['SOI in foreign data: no SOF marker before corruption'])
         res.extras['bytes'] = salvaged
         res.size = len(salvaged)
         res.damage.append((cut, max(0, len(data) - cut)))

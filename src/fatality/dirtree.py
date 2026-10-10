@@ -23,7 +23,7 @@ VALID_ATTRS = {
 }
 
 NAME_CHARS = set(
-    b'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    b'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'
     b"!#$%&'()-@^_`{}~ \x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f"
     b"\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f"
     b"\xa0\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf"
@@ -196,9 +196,12 @@ def is_fragment(slots: list[Slot], min_entries: int = 2) -> bool:
     dots = sum(1 for s in entries if s.name in ('.', '..'))
     if dots == 1:                     # half of a . / .. pair: malformed
         return False
+    # adjacency is the main discriminator; a couple of plausible refs is
+    # enough (stale clusters mix real entries with clobber junk by nature)
     plausible = sum(1 for s in entries if s.cluster == 0 or s.size == 0
                     or s.name in ('.', '..') or s.cluster >= 2)
-    return plausible >= 0.8 * len(entries)
+    has_self = any(s.name == '.' for s in entries)
+    return has_self or plausible >= min(2, len(entries))
 
 
 @dataclass

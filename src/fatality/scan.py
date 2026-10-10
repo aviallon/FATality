@@ -38,7 +38,7 @@ def scan_slots(f, start: int, end: int, chunk: int = 64 << 20,
         base = start + consumed
         n = len(buf) // 32 * 32
         arr = np.frombuffer(buf[:n], dtype=np.uint8).reshape(-1, 32)
-        mask = (_CHAR[arr[:, :12]].all(axis=1)
+        mask = (_CHAR[arr[:, :11]].all(axis=1)
                 & _ATTR[arr[:, 11]]
                 & ~np.all(arr == 0, axis=1))
         # name charset check for LFN rows is different: permit any utf16-ish

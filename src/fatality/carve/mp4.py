@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import struct
+import subprocess
 from dataclasses import dataclass, field
 
 from . import ExtractResult, Handler, Validation, register
