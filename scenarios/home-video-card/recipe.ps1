@@ -42,11 +42,18 @@ convert mbr
 create partition primary
 select partition 1
 active
-format fs=fat32 label=SCENARIO quick
+format fs=fat32 label=SCENARIO quick /P:0
 assign letter=W
 "@ | diskpart
 Start-Sleep -Seconds 2
-Log "vhd created and FAT32-formatted (windows format)"
+
+# SD-card semantics: Windows' format/delete issues a sanitize UNMAP across
+# the partition and the VHD driver turns discard into zero writes — which
+# would erase everything quick format is supposed to leave behind (real SD
+# cards keep the data; that is the whole premise of recovery). Disable
+# delete-notify (TRIM) so format/delete only touch metadata, like on SD.
+fsutil fs setDisableDeleteNotify 1
+Log "vhd created and FAT32-formatted (windows format, TRIM disabled)"
 
 # ---- 2. ground truth + manifest -------------------------------------------
 Copy-Item -Recurse -Force (Join-Path $gt '*') 'W:\'
@@ -62,7 +69,7 @@ foreach ($f in $doomed) {
 @"
 select vdisk file="$vhd"
 select partition 1
-format fs=fat32 label=SCENARIO quick
+format fs=fat32 label=SCENARIO quick /P:0
 assign letter=W
 "@ | diskpart
 Start-Sleep -Seconds 2

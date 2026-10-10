@@ -2,3 +2,7 @@
 __pycache__/
 smoke-out/
 *.egg-info/
+**/last-run/
+**/linux-run/
+**/windows-run/
+*.raw
