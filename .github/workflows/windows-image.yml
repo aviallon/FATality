@@ -26,14 +26,18 @@ jobs:
           cd scenarios/${{ inputs.scenario }}
           gzip -9 -k image.vfat
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Scoring preview (report-only, no baseline gate on windows)
         shell: powershell
         run: |
           uv python install 3.12
           uv venv .venv --python 3.12
           uv pip install -e '.[dev]'
-          .venv/bin/python tools/scenario.py run scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/image.vfat -o scenarios/${{ inputs.scenario }}/windows-run
-          .venv/bin/python tools/scenario.py report scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/windows-run/results.json
+          .\.venv\Scripts\python.exe tools/scenario.py run scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/image.vfat -o scenarios/${{ inputs.scenario }}/windows-run
+          .\.venv\Scripts\python.exe tools/scenario.py report scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/windows-run/results.json
 
       - uses: actions/upload-artifact@v4
         with:
