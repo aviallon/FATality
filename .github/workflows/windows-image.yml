@@ -24,7 +24,7 @@ jobs:
         shell: powershell
         run: |
           cd scenarios/${{ inputs.scenario }}
-          gzip -9 -k image.vfat
+          gzip -9 -k -f image.vfat
 
       - uses: astral-sh/setup-uv@v5
         with:

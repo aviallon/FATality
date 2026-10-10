@@ -25,6 +25,7 @@ $vhd     = Join-Path $OutDir 'image.vhd'
 $gt      = Join-Path $ScenarioDir 'groundtruth'
 $pf      = Join-Path $ScenarioDir 'postformat'
 $log     = Join-Path $OutDir 'recipe-log.txt'
+Clear-Content $log -ErrorAction SilentlyContinue
 
 # files deleted BEFORE the format: their names must survive as ghosts
 $doomed  = @('DCIM\100GOPRO\G0013657.JPG')
