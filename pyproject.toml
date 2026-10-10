@@ -33,7 +33,7 @@ ignore = ["SIM108"]   # ternaries are not automatically clearer
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/fatality"]
+files = ["src/fatality", "tools"]
 check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true

@@ -1,0 +1,188 @@
+{
+ "files": [
+  {
+   "path": "groundtruth/Alarms",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/Alarms/alarm.mp3",
+   "size": 1028,
+   "sha256": "5a16fe905f7e9ecac8f310e459b11fd9392e9c33ccd5ee40059867b17f6366c8",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
+   "size": 232795,
+   "sha256": "4714cdd8a2da1def8e4fbca7d89288dd30b33ed0fe4414093ec4fcee3f56d007",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
+   "size": 232750,
+   "sha256": "e699724c4e814345b0d907e246d815a1c044589e6082e8ddb0b400fc57325aa1",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.JPG",
+   "size": 232656,
+   "sha256": "b28138dc9e597995f6bcaec04d2274a0e51dd3f0b0e3229acef7f3d4fffde500",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
+   "size": 21642,
+   "sha256": "9382fc9cacf8a112b96d68e4171697594b506c15530bfcff8b2cfbfb40e764d9",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
+   "size": 35920,
+   "sha256": "8c042fa3acfa364057be878b7b5ecebf9c34de5a7fa1d6c30feafc924f431cad",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.THM",
+   "size": 11365,
+   "sha256": "cfa05ebf2e1c654a77fc7fe09cfbabb7d84ce92740ed00ed29152cba7be63bdb",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/MISC",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/MISC/SD_INFO.TXT",
+   "size": 39,
+   "sha256": "b5fb222930bc924d520bc238d87a36949d90e3045a11c78f0f6818c0197f6cb4",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/MISC/VERSION.TXT",
+   "size": 49,
+   "sha256": "99d1b888539aa1e50add4784b2b79b8260abf156ee01400334130b5ec05211ad",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/MUSIC",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/MUSIC/track.mp3",
+   "size": 2052,
+   "sha256": "d07914280ea385ab205df22fa77e37a35dd379b3b8ee9cb07c68b55389b22e27",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "groundtruth/a file with spaces and a very long name indeed.txt",
+   "size": 544,
+   "sha256": "8c87071ad44497ec7d0005a283f9108618eb47fafdb4c32174fd359a22e425e6",
+   "kind": "file",
+   "after_format": false,
+   "note": ""
+  },
+  {
+   "path": "postformat/Android",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/Android/data",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/Android/data/nomedia",
+   "size": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "kind": "file",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/DCIM",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/DCIM/NEWPHOTO.JPG",
+   "size": 232563,
+   "sha256": "89cd719702b4028f9ea0037957089631af45c348b1ef59724f9a6e4dc81a9ecf",
+   "kind": "file",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/LOST.DIR",
+   "size": 0,
+   "sha256": "",
+   "kind": "dir",
+   "after_format": true,
+   "note": ""
+  },
+  {
+   "path": "postformat/LOST.DIR/placeholder",
+   "size": 33,
+   "sha256": "8ebd8e4b42055338942067ab9a06f372229b3f0fc58a9c24cda82ae69fc5ca6f",
+   "kind": "file",
+   "after_format": true,
+   "note": ""
+  }
+ ]
+}

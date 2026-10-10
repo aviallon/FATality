@@ -1,0 +1,1 @@
+{"info version":"2.0","camera type":"SYNTHETIC"}

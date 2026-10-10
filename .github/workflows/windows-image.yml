@@ -1,0 +1,45 @@
+name: windows-scenario-image
+
+# Builds the blessed recovery-test image with REAL Windows tooling
+# (diskpart + Windows format) and uploads it for promotion into the repo.
+# Run manually; after review, commit the artifact as scenarios/<name>/image.vfat.gz
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: scenario directory name
+        default: home-video-card
+
+jobs:
+  build-image:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build VFAT image (windows format via diskpart)
+        shell: powershell
+        run: ./scenarios/${{ inputs.scenario }}/recipe.ps1
+
+      - name: Compress for promotion
+        shell: powershell
+        run: |
+          cd scenarios/${{ inputs.scenario }}
+          gzip -9 -k image.vfat
+
+      - name: Scoring preview (report-only, no baseline gate on windows)
+        shell: powershell
+        run: |
+          uv python install 3.12
+          uv venv .venv --python 3.12
+          uv pip install -e '.[dev]'
+          .venv/bin/python tools/scenario.py run scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/image.vfat -o scenarios/${{ inputs.scenario }}/windows-run
+          .venv/bin/python tools/scenario.py report scenarios/${{ inputs.scenario }} scenarios/${{ inputs.scenario }}/windows-run/results.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.scenario }}-image
+          path: |
+            scenarios/${{ inputs.scenario }}/image.vfat.gz
+            scenarios/${{ inputs.scenario }}/recipe-log.txt
+            scenarios/${{ inputs.scenario }}/windows-run/results.json
+          retention-days: 30

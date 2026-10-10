@@ -30,3 +30,42 @@ jobs:
       - name: pytest
         run: .venv/bin/python -m pytest tests/ -q
         # gold tests skip themselves when the (large) evidence image is absent
+
+  recovery-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install python + project (dev extras)
+        run: |
+          uv python install 3.12
+          uv venv .venv --python 3.12
+          uv pip install -e '.[dev]'
+
+      - name: Scenario recovery runs + baseline deltas
+        run: |
+          set -euo pipefail
+          for s in scenarios/*/; do
+            name=$(basename "$s")
+            img=""
+            if [ -f "$s/image.vfat.gz" ]; then img="$s/image.vfat.gz"; fi
+            if [ -f "$s/image.vfat" ]; then img="$s/image.vfat"; fi
+            if [ -z "$img" ]; then
+              echo "::notice::scenario $name: no blessed image yet (run windows-scenario-image)"
+              continue
+            fi
+            .venv/bin/python tools/scenario.py run "$s" "$img" -o "$s/last-run"
+            .venv/bin/python tools/scenario.py report "$s" "$s/last-run/results.json" \
+              -o "$s/last-run/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recovery-regression-reports
+          path: scenarios/*/last-run/
+          retention-days: 30

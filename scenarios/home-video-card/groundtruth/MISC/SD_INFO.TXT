@@ -1,0 +1,2 @@
+Card Slot ID: 0
+Product Name: TESTCARD
