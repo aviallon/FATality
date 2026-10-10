@@ -17,6 +17,12 @@ import subprocess
 from dataclasses import dataclass, field
 
 from . import ExtractResult, Handler, Validation, register
+from .mp4_reassemble import (MoovMetadata, ReassemblyResult, SampleStats,
+                             reassemble)
+
+__all__ = ['Atom', 'SampleTable', 'walk_atoms', 'parse_moov', 'gp_descriptors',
+           'nal_walk_ok', 'Mp4Handler', 'reassemble', 'ReassemblyResult',
+           'SampleStats', 'MoovMetadata']
 
 
 @dataclass
@@ -85,18 +91,18 @@ def parse_moov(data: bytes, moov: Atom) -> dict:
             if fixed:
                 sizes = [fixed] * cnt
             else:
-                sizes = list(struct.unpack(f'<{cnt}I', data[body + 12:body + 12 + 4 * cnt]))
+                sizes = list(struct.unpack(f'>{cnt}I', data[body + 12:body + 12 + 4 * cnt]))
             info['tracks'].append(dict(kind='stsz', sizes=sizes))
         elif a.kind == b'stco':
             cnt = struct.unpack('>I', data[body + 4:body + 8])[0]
             info['tracks'].append(dict(
                 kind='stco',
-                offsets=list(struct.unpack(f'<{cnt}I', data[body + 8:body + 8 + 4 * cnt]))))
+                offsets=list(struct.unpack(f'>{cnt}I', data[body + 8:body + 8 + 4 * cnt]))))
         elif a.kind == b'co64':
             cnt = struct.unpack('>I', data[body + 4:body + 8])[0]
             info['tracks'].append(dict(
                 kind='co64',
-                offsets=list(struct.unpack(f'<{cnt}Q', data[body + 8:body + 8 + 8 * cnt]))))
+                offsets=list(struct.unpack(f'>{cnt}Q', data[body + 8:body + 8 + 8 * cnt]))))
     return info
 
 
@@ -181,6 +187,16 @@ class Mp4Handler(Handler):
             return Validation(True, f'duration={p.stdout.strip()}', 0)
         except FileNotFoundError:
             return Validation(True, 'ffprobe unavailable; structure-only', 0)
+
+    def reassemble(self, f, gz, off: int, out_path, verify: bool = True) -> ReassemblyResult:
+        """Hook: full fragmented reassembly of the MP4 carved at `off`.
+
+        See :func:`fatality.carve.mp4_reassemble.reassemble` — the handler
+        method exists so any handler-driven flow (scan -> extract) can hand a
+        fragmented file to the extent-mapping engine without importing it
+        directly.
+        """
+        return reassemble(f, gz, off, out_path, verify=verify)
 
 
 register(Mp4Handler())
