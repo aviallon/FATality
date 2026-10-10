@@ -401,3 +401,36 @@ def test_gold_gopr3655_decodes_clean(gold):
            'failed to parse', 'sps_id')
     bad = [l for l in p.stderr.splitlines() if any(s in l.lower() for s in sig)]
     assert bad == []
+
+
+def test_flush_lattice_gcd_interleaved_quanta(tmp_path):
+    """Regression (the GOPR3666 case): interleaved writers make the extent
+    gaps G and 2G, so the delta steps are NOT constant.  The lattice must
+    still apply, with G inferred as the GCD of the steps; the old
+    constant-delta rule silently disabled it here and the fallback
+    misattributed boundaries."""
+    f0, f1 = ([390, 390], 1), ([558, 558], 2)
+    f2, f3, f4 = ([602, 602], 4), ([700, 100], 5), ([450, 450, 400], 7)
+    giant = [250, 3496]                                    # ties at any split
+    specs = [f0, f1, (giant, 3), f2, (giant, 6), f3, f4]
+    file_bytes, samples, desc_offs = _build_file(specs)
+    b1, b2 = 4096, 8192
+    for i, b in ((2, b1), (4, b2)):
+        lo, hi = samples[i][0] - 16, samples[i][0] + samples[i][1]
+        assert [B for B in range(lo + 1, hi + 1) if B % 4096 == 0] == [b]
+    g = 4096
+    x0 = 8192
+    x1 = x0 + b1 + g            # gap G  -> step  b1+g
+    x2 = x1 + (b2 - b1) + 2 * g  # gap 2G -> step (b2-b1)+2g  (NON-constant)
+    assert x1 - x0 != x2 - x1, 'steps must differ: this is the regression'
+    extents = [(0, b1, x0), (b1, b2, x1), (b2, len(file_bytes), x2)]
+    img = _scatter(file_bytes, extents, 1 << 21)
+    (tmp_path / 'img.bin').write_bytes(img)
+    out = tmp_path / 'out.mp4'
+    with open(tmp_path / 'img.bin', 'rb') as f:
+        res = reassemble(f, _synthetic_geometry(len(img)), x0, out)
+    assert res.status == 'complete'
+    assert out.read_bytes() == file_bytes
+    assert [e.chosen for e in res.switches] == [b1, b2]
+    assert all(e.method == 'flush-lattice' for e in res.switches)
+    assert res.sample_stats.nal_bad == 0
