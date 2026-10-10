@@ -73,3 +73,23 @@ def test_struct_coverage_is_documented():
     for s in schema.ALL_STRUCTS:
         for lo, hi in s.coverage():
             assert 0 <= lo < hi <= s.size, s.name
+
+
+def test_lfnent_survives_undecodable_utf16():
+    """Regression: real Windows-formatted images contain junk slots whose
+    UTF-16 chunks hold lone surrogates ('illegal encoding'); parsing must
+    degrade to '' (and the caller reject the slot), never raise."""
+    bad10 = b'\x00\xd8' * 5          # lone high surrogates: undecodable
+    bad12 = b'\x00\xd8' * 6
+    bad4 = b'\x00\xd8' * 2
+    slot = bytes([0x41]) + bad10 + bytes([0x0F, 0x00, 0x42]) + bad12 + \
+        b'\x00\x00' + bad4
+    e = schema.LFNENT.parse(slot)
+    assert schema.lfn_text(e) == ''
+    from fatality.dirtree import parse_slot
+    assert parse_slot(slot, 0) is None
+
+
+def test_utf16_field_never_raises():
+    f = schema.Field('x', 0, 4, 'utf16')
+    assert f.read(b'\x00\xd8\x00\xd8') == ''      # lone surrogates -> ''

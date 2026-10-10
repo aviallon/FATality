@@ -41,7 +41,10 @@ class Field:
         if self.kind == 'u64le':
             return struct.unpack('<Q', b)[0]
         if self.kind == 'utf16':
-            return b.decode('utf-16-le').rstrip('\uffff').rstrip('\x00')
+            try:
+                return b.decode('utf-16-le').rstrip('\uffff').rstrip('\x00')
+            except UnicodeDecodeError:
+                return ''    # junk slot: caller's emptiness check rejects it
         if self.kind == 'ascii':
             return b.decode('latin-1')
         return bytes(b)

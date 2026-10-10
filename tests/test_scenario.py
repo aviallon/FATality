@@ -102,3 +102,20 @@ def test_compare_improvement_passes():
     assert comp['class_delta']['intact'] == 1
     kinds = {d['change'] for d in comp['deltas']}
     assert 'IMPROVED' in kinds and 'NEW' in kinds
+
+
+def test_results_json_roundtrip(tmp_path):
+    """Regression: cmd_report deserializes scores as Score objects, not dicts."""
+    import json as _json
+    from dataclasses import asdict
+
+    from scenario import cmd_report
+    cur = RunResult(scenario='s', image='i', scores=[
+        Score(path='A', cls='intact', bytes_recovered=10, size=10)])
+    results = tmp_path / 'results.json'
+    results.write_text(_json.dumps(asdict(cur)))
+    sc = tmp_path / 'scenario'
+    sc.mkdir()
+    args = type('Args', (), dict(scenario=str(sc), results=str(results),
+                                 out=None, tolerance=0.0))
+    assert cmd_report(args) == 0          # no baseline -> report-only

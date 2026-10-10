@@ -274,7 +274,14 @@ def cmd_run(args) -> int:
 
 def cmd_report(args) -> int:
     sc = Path(args.scenario)
-    res = RunResult(**json.loads(Path(args.results).read_text()))
+    results_path = Path(args.results)
+    if not results_path.exists():
+        print(f'results not found: {results_path} (did the run step fail?)',
+              file=sys.stderr)
+        return 2
+    res_raw = json.loads(results_path.read_text())
+    res_raw['scores'] = [Score(**s) for s in res_raw['scores']]
+    res = RunResult(**res_raw)
     exp = sc / 'expected.json'
     if not exp.exists():
         rep = (f'# Recovery report — {sc.name}\n\n**No blessed baseline yet.**\n\n'
