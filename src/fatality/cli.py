@@ -216,6 +216,17 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_schema(args) -> int:
+    from . import schema
+    text = schema.dumps()
+    if args.out:
+        Path(args.out).write_text(text)
+        print(f'written {args.out}')
+    else:
+        print(text)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog='fatality')
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -227,6 +238,7 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_extract)
     p = sub.add_parser('verify'); p.add_argument('out'); p.set_defaults(fn=cmd_verify)
     p = sub.add_parser('report'); p.add_argument('out'); p.set_defaults(fn=cmd_report)
+    p = sub.add_parser('schema'); p.add_argument('-o', '--out'); p.set_defaults(fn=cmd_schema)
 
     args = ap.parse_args(argv)
     return args.fn(args)

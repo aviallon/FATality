@@ -10,6 +10,8 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 
+from . import schema
+
 
 @dataclass
 class Geometry:
@@ -76,38 +78,40 @@ class Geometry:
 
 
 def _parse_bpb(src: str, vol_off: int, vol_size: int, bs: bytes) -> Geometry | None:
-    if len(bs) < 512 or bs[510:512] != b'\x55\xaa':
+    if len(bs) < 512:
         return None
-    bps = struct.unpack('<H', bs[11:13])[0]
-    spc = bs[13]
-    reserved = struct.unpack('<H', bs[14:16])[0]
-    num_fats = bs[16]
-    root_entries = struct.unpack('<H', bs[17:19])[0]
+    try:
+        b = schema.BPB.parse(bs)
+    except ValueError:
+        return None
+    if b['signature'] != b'\x55\xaa':
+        return None
+    bps, spc = b['bps'], b['spc']
+    reserved, num_fats, root_entries = b['reserved'], b['num_fats'], b['root_entries']
     if not (bps in (512, 1024, 2048, 4096) and 1 <= spc <= 128 and reserved >= 1
             and num_fats in (1, 2) and spc & (spc - 1) == 0):
         return None
-    fat16_sects = struct.unpack('<H', bs[22:24])[0]
-    fat_sects = fat16_sects or struct.unpack('<I', bs[36:40])[0]
+    fat16_sects = b['fat_sects16']
+    fat_sects = fat16_sects or b['fat_sects32']
     if fat_sects == 0:
         return None
-    total = (struct.unpack('<H', bs[19:21])[0] or struct.unpack('<I', bs[32:36])[0])
+    total = b['total16'] or b['total32']
     if vol_size == 0:
         vol_size = total * bps
     # FAT32 iff the FAT size lives in the 32-bit field (FATSz16 == 0)
     fat_bits = 16 if fat16_sects else 32
-    root_cluster = struct.unpack('<I', bs[44:48])[0] if fat_bits == 32 else 0
+    root_cluster = b['root_cluster'] if fat_bits == 32 else 0
     # refine FAT bits by cluster count (FAT spec rule)
     g = Geometry(source=src, part_off=vol_off, part_size=vol_size, bps=bps, spc=spc,
                  reserved=reserved, num_fats=num_fats, fat_sects=fat_sects,
                  root_entries=root_entries, root_cluster=max(root_cluster, 2),
                  fat_bits=fat_bits,
-                 oem=bs[3:11].decode('latin-1', 'replace'),
-                 serial=struct.unpack('<I', bs[39:43])[0] if fat_bits == 32 else 0,
-                 label=(bs[71:82] if fat_bits == 32 else bs[43:54]).decode('latin-1', 'replace'))
+                 oem=b['oem'],
+                 serial=b['serial'] if fat_bits == 32 else 0,
+                 label=(b['label'] if fat_bits == 32 else bs[43:54].decode('latin-1', 'replace')))
     if g.fat_bits == 32:
         return g
-    n = g.cluster_count
-    g.fat_bits = 12 if n < 4085 else 16
+    g.fat_bits = 12 if schema.refine_fat12_16(g.cluster_count) == 'fat12' else 16
     return g
 
 

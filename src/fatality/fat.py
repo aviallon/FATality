@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import schema
 from .geometry import Geometry
 
 
@@ -45,7 +46,7 @@ class FatTable:
             a = array.array('H')
             a.frombytes(data[:len(data) // 2 * 2])
             return list(a)
-        # FAT12: packed 12-bit
+        # FAT12: packed 12-bit entries (schema: 1.5 bytes each)
         out = []
         for i in range(0, len(data) - 1, 3):
             w = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16)
@@ -54,18 +55,13 @@ class FatTable:
         return out
 
     def mask(self, v: int) -> int:
-        return v & (0x0FFFFFFF if self.gz.fat_bits == 32 else 0xFFFF)
+        return schema.fat_value(v, self.gz.fat_bits)
 
     def is_eoc(self, v: int) -> bool:
-        m = self.mask(v)
-        if self.gz.fat_bits == 32:
-            return m >= 0x0FFFFFF8
-        return m >= (0xFFF8 if self.gz.fat_bits == 16 else 0xFF8)
+        return schema.fat_is_eoc(self.mask(v), self.gz.fat_bits)
 
     def is_bad(self, v: int) -> bool:
-        m = self.mask(v)
-        return m == (0x0FFFFFF7 if self.gz.fat_bits == 32 else
-                     0xFFF7 if self.gz.fat_bits == 16 else 0xFF7)
+        return schema.fat_is_bad(self.mask(v), self.gz.fat_bits)
 
     def get(self, clu: int) -> int | None:
         return self.entries[clu] if clu < len(self.entries) else None
@@ -75,7 +71,7 @@ class FatTable:
         c = start
         lim = limit or self.gz.cluster_count + 2
         truncated = False
-        while 2 <= c < lim:
+        while schema.FAT_RESERVED_FIRST <= c < lim:
             if c in seen:
                 truncated = True
                 break

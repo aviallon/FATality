@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from . import schema
+
 ATTR_RO, ATTR_HIDDEN, ATTR_SYSTEM = 0x01, 0x02, 0x04
 ATTR_VOLUME, ATTR_DIR, ATTR_ARCHIVE = 0x08, 0x10, 0x20
 ATTR_LFN = 0x0F
@@ -77,36 +79,40 @@ class Slot:
 
 
 def parse_slot(b: bytes, off: int) -> Slot | None:
-    """Parse one 32-byte directory slot; None = implausible (not slot data)."""
+    """Parse one 32-byte directory slot; None = implausible (not slot data).
+
+    Field extraction is schema-driven (:data:`schema.DIRENT` /
+    :data:`schema.LFNENT`); this function keeps the *semantic* rules:
+    charset plausibility, date gating for short entries only, and the
+    LFN/short branching.
+    """
     if len(b) < 32:
         return None
     first = b[0]
     if first == 0x00:
         return None
-    attr = b[11]
+    attr = b[schema.DIRENT.fields[2].offset]      # 'attr' — same slot in LFNENT
     if attr not in VALID_ATTRS:
         return None
     deleted = first == 0xE5
 
-    if attr == ATTR_LFN:
+    if attr == schema.ATTR_LFN:
         # LFN slots: the bytes that look like dates are UTF-16 name payload —
         # no date gate here (that gate is for short entries only)
         seq = first & 0x1F
         if not 1 <= seq <= 20:
             return None
-        raw_name = b[1:11] + b[14:26] + b[28:32]
-        try:
-            txt = raw_name.decode('utf-16-le').rstrip('\uffff').rstrip('\x00')
-        except UnicodeDecodeError:
-            return None
+        e = schema.LFNENT.parse(b)
+        txt = schema.lfn_text(e)
         if not txt or any(ord(c) < 32 for c in txt):
             return None
         return Slot(off=off, raw=b, kind='lfn', deleted=deleted, name=txt,
                     wr_date=None)
 
-    crt_d = fat_date(int.from_bytes(b[16:18], 'little'))
-    acc_d = fat_date(int.from_bytes(b[18:20], 'little'))
-    wr_d = fat_date(int.from_bytes(b[24:26], 'little'))
+    e = schema.DIRENT.parse(b)
+    crt_d = fat_date(e['crt_date'])
+    acc_d = fat_date(e['acc_date'])
+    wr_d = fat_date(e['wr_date'])
     if crt_d is None and acc_d is None and wr_d is None:
         return None
 
@@ -114,19 +120,17 @@ def parse_slot(b: bytes, off: int) -> Slot | None:
     ext = b[8:11]
     if not all(c in NAME_CHARS for c in base + ext):
         return None
-    name = base.rstrip(b' ').decode('latin-1')
-    e = ext.rstrip(b' ').decode('latin-1')
-    full = f'{name}.{e}' if e else name
-    clu = b[26] | (b[27] << 8) | (b[20] << 16) | (b[21] << 24)
-    size = int.from_bytes(b[28:32], 'little')
+    full = schema.dirent_short_name(e)
+    clu = schema.dirent_cluster(e)
+    size = e['size']
 
-    if attr & ATTR_VOLUME and not (attr & (ATTR_DIR | 0x27)):
+    if attr & schema.ATTR_VOLUME and not (attr & (schema.ATTR_DIR | 0x27)):
         return Slot(off=off, raw=b, kind='volume', deleted=deleted, name=full,
                     attr=attr, wr_date=wr_d)
     return Slot(off=off, raw=b, kind='entry', deleted=deleted, name=full,
-                attr=attr, cluster=clu, size=size, is_dir=bool(attr & ATTR_DIR),
+                attr=attr, cluster=clu, size=size, is_dir=bool(attr & schema.ATTR_DIR),
                 crt_date=crt_d, acc_date=acc_d, wr_date=wr_d,
-                wr_time=fat_time(int.from_bytes(b[22:24], 'little')))
+                wr_time=fat_time(e['wr_time']))
 
 
 def merge_lfns(slots: list[Slot]) -> list[Slot]:
