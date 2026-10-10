@@ -77,6 +77,25 @@ Quality gates (all green, all enforced):
 - `fatality schema` dumps the on-disk structure model (see `src/fatality/schema.py`)
   as JSON — parsing is schema-driven, field offsets live in one place.
 
+## Recovery regression harness (CI)
+
+Quasi-real scenario images are scored against ground truth on every push:
+
+- `scenarios/<name>/groundtruth/` + `postformat/` + `manifest.json` — the
+  exact content contract (sizes + sha256), including a pre-format deleted
+  file whose *name* must survive as a ghost.
+- `scenarios/<name>/recipe.ps1` builds the image **the Windows way**
+  (diskpart + Windows `format`, no dosfstools): copy ground truth → delete
+  doomed files → **quick format** → copy post-format usage → trim to raw.
+  Built by the `windows-scenario-image` workflow; the artifact is promoted
+  to `scenarios/<name>/image.vfat.gz` and committed as the blessed fixture.
+- `tools/scenario.py run` scores an extraction (intact / partial /
+  name-only / lost + false positives); `report` diffs against the blessed
+  `expected.json` baseline and prints **positive and negative deltas**.
+- CI publishes the delta report to the job summary and uploads raw results;
+  negative deltas fail the build (tolerance configurable). Absent baseline =
+  report-only mode until blessed.
+
 ## Status
 
 v0.1 — core implementation. See `docs/design.md` for the evidence model.
