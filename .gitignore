@@ -8,3 +8,4 @@ smoke-out/
 *.raw
 *.vfat
 *.vhd
+**/run/
