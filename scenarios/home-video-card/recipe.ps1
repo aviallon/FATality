@@ -42,9 +42,10 @@ convert mbr
 create partition primary
 select partition 1
 active
-format fs=fat32 label=SCENARIO quick /P:0
+format fs=fat32 label=SCENARIO quick
 assign letter=W
 "@ | diskpart
+if ($LASTEXITCODE -ne 0) { throw "diskpart (create/format) failed" }
 Start-Sleep -Seconds 2
 
 # SD-card semantics: Windows' format/delete issues a sanitize UNMAP across
@@ -52,8 +53,12 @@ Start-Sleep -Seconds 2
 # would erase everything quick format is supposed to leave behind (real SD
 # cards keep the data; that is the whole premise of recovery). Disable
 # delete-notify (TRIM) so format/delete only touch metadata, like on SD.
-fsutil fs setDisableDeleteNotify 1
+fsutil behavior set disabledeletenotify 1
+if ($LASTEXITCODE -ne 0) { throw "fsutil setDisableDeleteNotify failed" }
+fsutil behavior query disabledeletenotify
 Log "vhd created and FAT32-formatted (windows format, TRIM disabled)"
+
+if (-not (Test-Path 'W:\')) { throw 'drive W: was not assigned' }
 
 # ---- 2. ground truth + manifest -------------------------------------------
 Copy-Item -Recurse -Force (Join-Path $gt '*') 'W:\'
@@ -69,9 +74,10 @@ foreach ($f in $doomed) {
 @"
 select vdisk file="$vhd"
 select partition 1
-format fs=fat32 label=SCENARIO quick /P:0
+format fs=fat32 label=SCENARIO quick
 assign letter=W
 "@ | diskpart
+if ($LASTEXITCODE -ne 0) { throw "diskpart (quick format) failed" }
 Start-Sleep -Seconds 2
 Log "QUICK FORMAT done"
 
@@ -84,6 +90,7 @@ Log "postformat copied"
 select vdisk file="$vhd"
 detach vdisk
 "@ | diskpart
+if ($LASTEXITCODE -ne 0) { throw "diskpart (detach) failed" }
 Start-Sleep -Seconds 2
 
 $vhdSize = (Get-Item $vhd).Length
