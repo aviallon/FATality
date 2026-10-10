@@ -171,6 +171,7 @@ def score_extraction(manifest: list[Truth], extracted: Path,
             rec_by_name.setdefault(p.name.lower(), []).append(p)
 
     res = RunResult(scenario='', image=str(extracted))
+    matched_files: set[Path] = set()
     for t in manifest:
         if t.kind == 'dir':
             continue
@@ -183,11 +184,13 @@ def score_extraction(manifest: list[Truth], extracted: Path,
             s.sha_match = True
             s.bytes_recovered = t.size
             s.evidence = f'content match: {hits[0]}'
+            matched_files.update(hits)
         else:
             # partial: same name recovered but content differs
             cands = rec_by_name.get(base, [])
             if cands:
                 best = max(cands, key=lambda p: p.stat().st_size)
+                matched_files.update(cands)
                 got = best.stat().st_size
                 if 0 < got < t.size:
                     s.cls = 'partial'
@@ -208,7 +211,10 @@ def score_extraction(manifest: list[Truth], extracted: Path,
     {id(s) for s in res.scores if s.cls != 'lost'}
     named_paths = {p for v in rec_by_name.values() for p in v}
     truth_names = {Path(t.path).name.lower() for t in manifest if t.kind == 'file'}
-    fp = [p for p in named_paths if p.name.lower() not in truth_names]
+    # a file matched to ground truth (by hash or by name) is NOT a false
+    # positive, even if it was recovered under a generated name
+    fp = [p for p in named_paths
+          if p not in matched_files and p.name.lower() not in truth_names]
     res.false_positives = len(fp)
     res.extra_named = sorted(str(p) for p in fp)[:50]
     return res

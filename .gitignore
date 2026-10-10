@@ -6,3 +6,5 @@ smoke-out/
 **/linux-run/
 **/windows-run/
 *.raw
+*.vfat
+*.vhd

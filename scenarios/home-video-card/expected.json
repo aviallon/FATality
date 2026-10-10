@@ -1,0 +1,120 @@
+{
+ "blessed": "first windows-made fixture generation (composite-healed)",
+ "counts": {
+  "lost": 6,
+  "intact": 9,
+  "partial": 2,
+  "name-only": 1
+ },
+ "false_positives": 4,
+ "scores": [
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013658.JPG",
+   "cls": "intact",
+   "bytes_recovered": 2089968,
+   "size": 2089968
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013659.JPG",
+   "cls": "intact",
+   "bytes_recovered": 2089955,
+   "size": 2089955
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013660.JPG",
+   "cls": "intact",
+   "bytes_recovered": 2089346,
+   "size": 2089346
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013661.JPG",
+   "cls": "intact",
+   "bytes_recovered": 2089652,
+   "size": 2089652
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.JPG",
+   "cls": "intact",
+   "bytes_recovered": 2089692,
+   "size": 2089692
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.THM",
+   "cls": "intact",
+   "bytes_recovered": 11365,
+   "size": 11365
+  },
+  {
+   "path": "groundtruth/MISC/SD_INFO.TXT",
+   "cls": "partial",
+   "bytes_recovered": 39,
+   "size": 39
+  },
+  {
+   "path": "groundtruth/MISC/VERSION.TXT",
+   "cls": "partial",
+   "bytes_recovered": 49,
+   "size": 49
+  },
+  {
+   "path": "groundtruth/MUSIC/track.mp3",
+   "cls": "intact",
+   "bytes_recovered": 2052,
+   "size": 2052
+  },
+  {
+   "path": "postformat/Android/data/nomedia",
+   "cls": "name-only",
+   "bytes_recovered": 0,
+   "size": 0
+  },
+  {
+   "path": "postformat/DCIM/NEWPHOTO.JPG",
+   "cls": "intact",
+   "bytes_recovered": 205481,
+   "size": 205481
+  },
+  {
+   "path": "postformat/LOST.DIR/placeholder",
+   "cls": "intact",
+   "bytes_recovered": 33,
+   "size": 33
+  },
+  {
+   "path": "groundtruth/Alarms/alarm.mp3",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 1028
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2089359
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2090048
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2794599
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 7491436
+  },
+  {
+   "path": "groundtruth/a file with spaces and a very long name indeed.txt",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 544
+  }
+ ]
+}
