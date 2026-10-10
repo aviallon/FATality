@@ -1,5 +1,6 @@
 {
- "blessed": "first windows-made fixture generation (composite-healed)",
+ "blessed": "windows-made fixture (composite-healed); bytes = prefix-match metric",
+ "metric": "bytes_recovered = leading-identical-bytes vs ground truth (stricter than the old size proxy)",
  "counts": {
   "lost": 6,
   "intact": 9,
@@ -8,6 +9,24 @@
  },
  "false_positives": 4,
  "scores": [
+  {
+   "path": "groundtruth/Alarms/alarm.mp3",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 1028
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2089359
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2090048
+  },
   {
    "path": "groundtruth/DCIM/100GOPRO/G0013658.JPG",
    "cls": "intact",
@@ -39,6 +58,18 @@
    "size": 2089692
   },
   {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 2794599
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 7491436
+  },
+  {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.THM",
    "cls": "intact",
    "bytes_recovered": 11365,
@@ -47,13 +78,13 @@
   {
    "path": "groundtruth/MISC/SD_INFO.TXT",
    "cls": "partial",
-   "bytes_recovered": 39,
+   "bytes_recovered": 15,
    "size": 39
   },
   {
    "path": "groundtruth/MISC/VERSION.TXT",
    "cls": "partial",
-   "bytes_recovered": 49,
+   "bytes_recovered": 48,
    "size": 49
   },
   {
@@ -61,6 +92,12 @@
    "cls": "intact",
    "bytes_recovered": 2052,
    "size": 2052
+  },
+  {
+   "path": "groundtruth/a file with spaces and a very long name indeed.txt",
+   "cls": "lost",
+   "bytes_recovered": 0,
+   "size": 544
   },
   {
    "path": "postformat/Android/data/nomedia",
@@ -79,42 +116,6 @@
    "cls": "intact",
    "bytes_recovered": 33,
    "size": 33
-  },
-  {
-   "path": "groundtruth/Alarms/alarm.mp3",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 1028
-  },
-  {
-   "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 2089359
-  },
-  {
-   "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 2090048
-  },
-  {
-   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 2794599
-  },
-  {
-   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 7491436
-  },
-  {
-   "path": "groundtruth/a file with spaces and a very long name indeed.txt",
-   "cls": "lost",
-   "bytes_recovered": 0,
-   "size": 544
   }
  ]
 }
