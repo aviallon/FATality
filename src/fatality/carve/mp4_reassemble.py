@@ -46,6 +46,8 @@ import shutil
 import struct
 import subprocess
 from dataclasses import dataclass, field
+from functools import reduce
+from math import gcd
 from pathlib import Path
 from typing import BinaryIO, Iterable, Sequence
 
@@ -710,21 +712,23 @@ class _Walker:
         """Resolve every structurally-tied boundary, then rebuild the runs.
 
         Flush-lattice evidence: a camera that interleaves two files writes
-        extents in flush quanta — every gap between two extents of this file
-        is exactly one quantum (the delta progression d_new - d_old is the
-        same constant G at every switch), so the file's extent boundaries all
-        lie on the lattice B = k*G (the file starts at extent start 0).  On
-        the fixture this pins 141/141 boundaries and the reassembled video
-        decodes with zero decoder errors, where the per-sample decode oracle
-        alone leaves 39 ambiguous.  Applied only when the file itself shows
-        the constant-G signature and each switch window holds exactly one
-        lattice candidate; otherwise ties fall through to the decode oracle.
+        extents in flush quanta — gaps between two extents of this file are
+        small multiples of one quantum G (the d_new - d_old progression is
+        G, 2G, 3G... as sibling files flush in between), so the file's
+        extent boundaries all lie on the lattice B = k*G.  G is therefore
+        the GCD of the observed deltas, not a constant: requiring constant
+        deltas (as an earlier version did) silently disabled the lattice
+        for exactly the files with the heaviest interleaving.  The quantum
+        must be strictly coarser than cluster granularity to discriminate;
+        per-switch, the lattice applies only where exactly one candidate
+        sits on it, otherwise ties fall through to the decode oracle.
         """
-        deltas = {e.delta_new - e.delta_old for e in res.switches}
-        if len(res.switches) >= 2 and len(deltas) == 1:
-            g = deltas.pop()
-            if g > 0 and all(sum(1 for B in e.cands if B % g == 0) == 1
-                            for e in res.switches):
+        deltas = {abs(e.delta_new - e.delta_old) for e in res.switches}
+        deltas.discard(0)
+        if res.switches and deltas:
+            g = reduce(gcd, deltas)
+            cluster = getattr(self.gz, 'cluster_bytes', None) or 32768
+            if g > cluster:
                 self.lattice_g = g
         for e in res.switches:
             if e.method == 'structural-tie':
