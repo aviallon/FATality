@@ -1,0 +1,1603 @@
+{
+ "seed": 42,
+ "density": 0.002,
+ "events": [
+  {
+   "offset": 65536,
+   "length": 512,
+   "structure": "boot-sector",
+   "reason": "boot sector"
+  },
+  {
+   "offset": 68608,
+   "length": 512,
+   "structure": "reserved-sector-6",
+   "reason": "backup boot sector"
+  },
+  {
+   "offset": 66048,
+   "length": 512,
+   "structure": "fsinfo",
+   "reason": "fsinfo"
+  },
+  {
+   "offset": 3248017,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 0 random span"
+  },
+  {
+   "offset": 3376186,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 0 random span"
+  },
+  {
+   "offset": 3461457,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 0 random span"
+  },
+  {
+   "offset": 3947955,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 1 random span"
+  },
+  {
+   "offset": 3984894,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 1 random span"
+  },
+  {
+   "offset": 4195609,
+   "length": 4096,
+   "structure": "fat",
+   "reason": "fat copy 1 random span"
+  },
+  {
+   "offset": 4259840,
+   "length": 512,
+   "structure": "cluster-2-ROOT",
+   "reason": "root directory"
+  },
+  {
+   "offset": 9639936,
+   "length": 512,
+   "structure": "cluster-2629",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 223623168,
+   "length": 512,
+   "structure": "cluster-107113",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 241334272,
+   "length": 512,
+   "structure": "cluster-115761",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 134426624,
+   "length": 512,
+   "structure": "cluster-63560",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 142942208,
+   "length": 512,
+   "structure": "cluster-67718",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 81039360,
+   "length": 512,
+   "structure": "cluster-37492",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 119717888,
+   "length": 512,
+   "structure": "cluster-56378",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 23918592,
+   "length": 512,
+   "structure": "cluster-9601",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 249876480,
+   "length": 512,
+   "structure": "cluster-119932",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 235296768,
+   "length": 512,
+   "structure": "cluster-112813",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 231192576,
+   "length": 512,
+   "structure": "cluster-110809",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 87824384,
+   "length": 512,
+   "structure": "cluster-40805",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 174600192,
+   "length": 512,
+   "structure": "cluster-83176",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 135145472,
+   "length": 512,
+   "structure": "cluster-63911",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 78768128,
+   "length": 512,
+   "structure": "cluster-36383",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 137291776,
+   "length": 512,
+   "structure": "cluster-64959",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 187789312,
+   "length": 512,
+   "structure": "cluster-89616",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 90673152,
+   "length": 512,
+   "structure": "cluster-42196",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 82032640,
+   "length": 512,
+   "structure": "cluster-37977",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 264966144,
+   "length": 512,
+   "structure": "cluster-127300",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 112654336,
+   "length": 512,
+   "structure": "cluster-52929",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 165011456,
+   "length": 512,
+   "structure": "cluster-78494",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 136376320,
+   "length": 512,
+   "structure": "cluster-64512",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 115769344,
+   "length": 512,
+   "structure": "cluster-54450",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 260311040,
+   "length": 512,
+   "structure": "cluster-125027",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 100558848,
+   "length": 512,
+   "structure": "cluster-47023",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 118659072,
+   "length": 512,
+   "structure": "cluster-55861",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 54661120,
+   "length": 512,
+   "structure": "cluster-24612",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 263231488,
+   "length": 512,
+   "structure": "cluster-126453",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 116811776,
+   "length": 512,
+   "structure": "cluster-54959",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 138665984,
+   "length": 512,
+   "structure": "cluster-65630",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 160700416,
+   "length": 512,
+   "structure": "cluster-76389",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 76521472,
+   "length": 512,
+   "structure": "cluster-35286",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 122607616,
+   "length": 512,
+   "structure": "cluster-57789",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 139896832,
+   "length": 512,
+   "structure": "cluster-66231",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 24238080,
+   "length": 512,
+   "structure": "cluster-9757",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 227856384,
+   "length": 512,
+   "structure": "cluster-109180",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 220096512,
+   "length": 512,
+   "structure": "cluster-105391",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 242763776,
+   "length": 512,
+   "structure": "cluster-116459",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 167299072,
+   "length": 512,
+   "structure": "cluster-79611",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 50034688,
+   "length": 512,
+   "structure": "cluster-22353",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 159137792,
+   "length": 512,
+   "structure": "cluster-75626",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 177563648,
+   "length": 512,
+   "structure": "cluster-84623",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 30767104,
+   "length": 512,
+   "structure": "cluster-12945",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 14897152,
+   "length": 512,
+   "structure": "cluster-5196",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 97048576,
+   "length": 512,
+   "structure": "cluster-45309",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 198895616,
+   "length": 512,
+   "structure": "cluster-95039",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 143294464,
+   "length": 512,
+   "structure": "cluster-67890",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 74838016,
+   "length": 512,
+   "structure": "cluster-34464",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 11141120,
+   "length": 512,
+   "structure": "cluster-3362",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 31449088,
+   "length": 512,
+   "structure": "cluster-13278",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 53678080,
+   "length": 512,
+   "structure": "cluster-24132",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 161099776,
+   "length": 512,
+   "structure": "cluster-76584",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 231925760,
+   "length": 512,
+   "structure": "cluster-111167",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 100110336,
+   "length": 512,
+   "structure": "cluster-46804",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 177489920,
+   "length": 512,
+   "structure": "cluster-84587",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 207532032,
+   "length": 512,
+   "structure": "cluster-99256",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 180740096,
+   "length": 512,
+   "structure": "cluster-86174",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 228974592,
+   "length": 512,
+   "structure": "cluster-109726",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 186288128,
+   "length": 512,
+   "structure": "cluster-88883",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 221921280,
+   "length": 512,
+   "structure": "cluster-106282",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 200873984,
+   "length": 512,
+   "structure": "cluster-96005",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 152668160,
+   "length": 512,
+   "structure": "cluster-72467",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 40609792,
+   "length": 512,
+   "structure": "cluster-17751",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 196075520,
+   "length": 512,
+   "structure": "cluster-93662",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 39745536,
+   "length": 512,
+   "structure": "cluster-17329",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 44003328,
+   "length": 512,
+   "structure": "cluster-19408",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 91953152,
+   "length": 512,
+   "structure": "cluster-42821",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 11710464,
+   "length": 512,
+   "structure": "cluster-3640",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 99858432,
+   "length": 512,
+   "structure": "cluster-46681",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 146255872,
+   "length": 512,
+   "structure": "cluster-69336",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 56844288,
+   "length": 512,
+   "structure": "cluster-25678",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 179075072,
+   "length": 512,
+   "structure": "cluster-85361",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 83015680,
+   "length": 512,
+   "structure": "cluster-38457",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 236216320,
+   "length": 512,
+   "structure": "cluster-113262",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 22353920,
+   "length": 512,
+   "structure": "cluster-8837",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 53460992,
+   "length": 512,
+   "structure": "cluster-24026",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 152051712,
+   "length": 512,
+   "structure": "cluster-72166",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 194979840,
+   "length": 512,
+   "structure": "cluster-93127",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 120150016,
+   "length": 512,
+   "structure": "cluster-56589",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 238098432,
+   "length": 512,
+   "structure": "cluster-114181",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 236072960,
+   "length": 512,
+   "structure": "cluster-113192",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 210089984,
+   "length": 512,
+   "structure": "cluster-100505",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 152492032,
+   "length": 512,
+   "structure": "cluster-72381",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 120870912,
+   "length": 512,
+   "structure": "cluster-56941",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 142051328,
+   "length": 512,
+   "structure": "cluster-67283",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 93595648,
+   "length": 512,
+   "structure": "cluster-43623",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 12894208,
+   "length": 512,
+   "structure": "cluster-4218",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 4888576,
+   "length": 512,
+   "structure": "cluster-309",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 43358208,
+   "length": 512,
+   "structure": "cluster-19093",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 97865728,
+   "length": 512,
+   "structure": "cluster-45708",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 86945792,
+   "length": 512,
+   "structure": "cluster-40376",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 247351296,
+   "length": 512,
+   "structure": "cluster-118699",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 40284160,
+   "length": 512,
+   "structure": "cluster-17592",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 122769408,
+   "length": 512,
+   "structure": "cluster-57868",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 4521984,
+   "length": 512,
+   "structure": "cluster-130",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 122112000,
+   "length": 512,
+   "structure": "cluster-57547",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 70438912,
+   "length": 512,
+   "structure": "cluster-32316",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 230703104,
+   "length": 512,
+   "structure": "cluster-110570",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 21102592,
+   "length": 512,
+   "structure": "cluster-8226",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 228104192,
+   "length": 512,
+   "structure": "cluster-109301",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 87269376,
+   "length": 512,
+   "structure": "cluster-40534",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 13801472,
+   "length": 512,
+   "structure": "cluster-4661",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 213219328,
+   "length": 512,
+   "structure": "cluster-102033",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 129961984,
+   "length": 512,
+   "structure": "cluster-61380",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 37236736,
+   "length": 512,
+   "structure": "cluster-16104",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 152068096,
+   "length": 512,
+   "structure": "cluster-72174",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 166592512,
+   "length": 512,
+   "structure": "cluster-79266",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 151533568,
+   "length": 512,
+   "structure": "cluster-71913",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 186308608,
+   "length": 512,
+   "structure": "cluster-88893",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 171165696,
+   "length": 512,
+   "structure": "cluster-81499",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 135550976,
+   "length": 512,
+   "structure": "cluster-64109",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 67989504,
+   "length": 512,
+   "structure": "cluster-31120",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 95215616,
+   "length": 512,
+   "structure": "cluster-44414",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 182366208,
+   "length": 512,
+   "structure": "cluster-86968",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 69464064,
+   "length": 512,
+   "structure": "cluster-31840",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 12986368,
+   "length": 512,
+   "structure": "cluster-4263",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 12363776,
+   "length": 512,
+   "structure": "cluster-3959",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 192468992,
+   "length": 512,
+   "structure": "cluster-91901",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 148549632,
+   "length": 512,
+   "structure": "cluster-70456",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 236195840,
+   "length": 512,
+   "structure": "cluster-113252",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 232343552,
+   "length": 512,
+   "structure": "cluster-111371",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 130523136,
+   "length": 512,
+   "structure": "cluster-61654",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 67508224,
+   "length": 512,
+   "structure": "cluster-30885",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 6125568,
+   "length": 512,
+   "structure": "cluster-913",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 40714240,
+   "length": 512,
+   "structure": "cluster-17802",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 82958336,
+   "length": 512,
+   "structure": "cluster-38429",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 102053888,
+   "length": 512,
+   "structure": "cluster-47753",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 216145920,
+   "length": 512,
+   "structure": "cluster-103462",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 184360960,
+   "length": 512,
+   "structure": "cluster-87942",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 172619776,
+   "length": 512,
+   "structure": "cluster-82209",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 142972928,
+   "length": 512,
+   "structure": "cluster-67733",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 21284864,
+   "length": 512,
+   "structure": "cluster-8315",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 158332928,
+   "length": 512,
+   "structure": "cluster-75233",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 9703424,
+   "length": 512,
+   "structure": "cluster-2660",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 257980416,
+   "length": 512,
+   "structure": "cluster-123889",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 108867584,
+   "length": 512,
+   "structure": "cluster-51080",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 96532480,
+   "length": 512,
+   "structure": "cluster-45057",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 12167168,
+   "length": 512,
+   "structure": "cluster-3863",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 145827840,
+   "length": 512,
+   "structure": "cluster-69127",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 47140864,
+   "length": 512,
+   "structure": "cluster-20940",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 228007936,
+   "length": 512,
+   "structure": "cluster-109254",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 151980032,
+   "length": 512,
+   "structure": "cluster-72131",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 211689472,
+   "length": 512,
+   "structure": "cluster-101286",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 33222656,
+   "length": 512,
+   "structure": "cluster-14144",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 65286144,
+   "length": 512,
+   "structure": "cluster-29800",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 120010752,
+   "length": 512,
+   "structure": "cluster-56521",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 90789888,
+   "length": 512,
+   "structure": "cluster-42253",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 235087872,
+   "length": 512,
+   "structure": "cluster-112711",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 53553152,
+   "length": 512,
+   "structure": "cluster-24071",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 211152896,
+   "length": 512,
+   "structure": "cluster-101024",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 6922240,
+   "length": 512,
+   "structure": "cluster-1302",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 17377280,
+   "length": 512,
+   "structure": "cluster-6407",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 18561024,
+   "length": 512,
+   "structure": "cluster-6985",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 14432256,
+   "length": 512,
+   "structure": "cluster-4969",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 90742784,
+   "length": 512,
+   "structure": "cluster-42230",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 73463808,
+   "length": 512,
+   "structure": "cluster-33793",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 16642048,
+   "length": 512,
+   "structure": "cluster-6048",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 231163904,
+   "length": 512,
+   "structure": "cluster-110795",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 110141440,
+   "length": 512,
+   "structure": "cluster-51702",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 238831616,
+   "length": 512,
+   "structure": "cluster-114539",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 108627968,
+   "length": 512,
+   "structure": "cluster-50963",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 31049728,
+   "length": 512,
+   "structure": "cluster-13083",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 25253888,
+   "length": 512,
+   "structure": "cluster-10253",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 250949632,
+   "length": 512,
+   "structure": "cluster-120456",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 266563584,
+   "length": 512,
+   "structure": "cluster-128080",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 57528320,
+   "length": 512,
+   "structure": "cluster-26012",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 188231680,
+   "length": 512,
+   "structure": "cluster-89832",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 26972160,
+   "length": 512,
+   "structure": "cluster-11092",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 241676288,
+   "length": 512,
+   "structure": "cluster-115928",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 186251264,
+   "length": 512,
+   "structure": "cluster-88865",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 128665600,
+   "length": 512,
+   "structure": "cluster-60747",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 46088192,
+   "length": 512,
+   "structure": "cluster-20426",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 220350464,
+   "length": 512,
+   "structure": "cluster-105515",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 204603392,
+   "length": 512,
+   "structure": "cluster-97826",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 251066368,
+   "length": 512,
+   "structure": "cluster-120513",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 91049984,
+   "length": 512,
+   "structure": "cluster-42380",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 89049088,
+   "length": 512,
+   "structure": "cluster-41403",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 51472384,
+   "length": 512,
+   "structure": "cluster-23055",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 24383488,
+   "length": 512,
+   "structure": "cluster-9828",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 247920640,
+   "length": 512,
+   "structure": "cluster-118977",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 239259648,
+   "length": 512,
+   "structure": "cluster-114748",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 218087424,
+   "length": 512,
+   "structure": "cluster-104410",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 150605824,
+   "length": 512,
+   "structure": "cluster-71460",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 45654016,
+   "length": 512,
+   "structure": "cluster-20214",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 185372672,
+   "length": 512,
+   "structure": "cluster-88436",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 220424192,
+   "length": 512,
+   "structure": "cluster-105551",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 79618048,
+   "length": 512,
+   "structure": "cluster-36798",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 39487488,
+   "length": 512,
+   "structure": "cluster-17203",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 94269440,
+   "length": 512,
+   "structure": "cluster-43952",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 131086336,
+   "length": 512,
+   "structure": "cluster-61929",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 203292672,
+   "length": 512,
+   "structure": "cluster-97186",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 252516352,
+   "length": 512,
+   "structure": "cluster-121221",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 179484672,
+   "length": 512,
+   "structure": "cluster-85561",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 255043584,
+   "length": 512,
+   "structure": "cluster-122455",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 120131584,
+   "length": 512,
+   "structure": "cluster-56580",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 34758656,
+   "length": 512,
+   "structure": "cluster-14894",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 194445312,
+   "length": 512,
+   "structure": "cluster-92866",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 264716288,
+   "length": 512,
+   "structure": "cluster-127178",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 95221760,
+   "length": 512,
+   "structure": "cluster-44417",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 186161152,
+   "length": 512,
+   "structure": "cluster-88821",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 10405888,
+   "length": 512,
+   "structure": "cluster-3003",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 101271552,
+   "length": 512,
+   "structure": "cluster-47371",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 142280704,
+   "length": 512,
+   "structure": "cluster-67395",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 141867008,
+   "length": 512,
+   "structure": "cluster-67193",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 251017216,
+   "length": 512,
+   "structure": "cluster-120489",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 182908928,
+   "length": 512,
+   "structure": "cluster-87233",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 90578944,
+   "length": 512,
+   "structure": "cluster-42150",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 19329024,
+   "length": 512,
+   "structure": "cluster-7360",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 151396352,
+   "length": 512,
+   "structure": "cluster-71846",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 218892288,
+   "length": 512,
+   "structure": "cluster-104803",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 14036992,
+   "length": 512,
+   "structure": "cluster-4776",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 73715712,
+   "length": 512,
+   "structure": "cluster-33916",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 51116032,
+   "length": 512,
+   "structure": "cluster-22881",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 187897856,
+   "length": 512,
+   "structure": "cluster-89669",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 157997056,
+   "length": 512,
+   "structure": "cluster-75069",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 241330176,
+   "length": 512,
+   "structure": "cluster-115759",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 107417600,
+   "length": 512,
+   "structure": "cluster-50372",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 152211456,
+   "length": 512,
+   "structure": "cluster-72244",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 142544896,
+   "length": 512,
+   "structure": "cluster-67524",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 92829696,
+   "length": 512,
+   "structure": "cluster-43249",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 13494272,
+   "length": 512,
+   "structure": "cluster-4511",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 82343936,
+   "length": 512,
+   "structure": "cluster-38129",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 234428416,
+   "length": 512,
+   "structure": "cluster-112389",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 174981120,
+   "length": 512,
+   "structure": "cluster-83362",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 7426048,
+   "length": 512,
+   "structure": "cluster-1548",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 177319936,
+   "length": 512,
+   "structure": "cluster-84504",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 140263424,
+   "length": 512,
+   "structure": "cluster-66410",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 69232640,
+   "length": 512,
+   "structure": "cluster-31727",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 76199936,
+   "length": 512,
+   "structure": "cluster-35129",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 246677504,
+   "length": 512,
+   "structure": "cluster-118370",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 41768960,
+   "length": 512,
+   "structure": "cluster-18317",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 131094528,
+   "length": 512,
+   "structure": "cluster-61933",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 182454272,
+   "length": 512,
+   "structure": "cluster-87011",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 235489280,
+   "length": 512,
+   "structure": "cluster-112907",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 44810240,
+   "length": 512,
+   "structure": "cluster-19802",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 174368768,
+   "length": 512,
+   "structure": "cluster-83063",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 56598528,
+   "length": 512,
+   "structure": "cluster-25558",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 90748928,
+   "length": 512,
+   "structure": "cluster-42233",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 244819968,
+   "length": 512,
+   "structure": "cluster-117463",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 217876480,
+   "length": 512,
+   "structure": "cluster-104307",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 141035520,
+   "length": 512,
+   "structure": "cluster-66787",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 233697280,
+   "length": 512,
+   "structure": "cluster-112032",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 102522880,
+   "length": 512,
+   "structure": "cluster-47982",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 33116160,
+   "length": 512,
+   "structure": "cluster-14092",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 230617088,
+   "length": 512,
+   "structure": "cluster-110528",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 186619904,
+   "length": 512,
+   "structure": "cluster-89045",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 123813888,
+   "length": 512,
+   "structure": "cluster-58378",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 76470272,
+   "length": 512,
+   "structure": "cluster-35261",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 137555968,
+   "length": 512,
+   "structure": "cluster-65088",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 195538944,
+   "length": 512,
+   "structure": "cluster-93400",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 235325440,
+   "length": 512,
+   "structure": "cluster-112827",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 141606912,
+   "length": 512,
+   "structure": "cluster-67066",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 160964608,
+   "length": 512,
+   "structure": "cluster-76518",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 150917120,
+   "length": 512,
+   "structure": "cluster-71612",
+   "reason": "random data cluster"
+  },
+  {
+   "offset": 199079936,
+   "length": 512,
+   "structure": "cluster-95129",
+   "reason": "random data cluster"
+  }
+ ],
+ "rule": "targeted metadata (boot/fsinfo/fat/root) + seeded scatter"
+}

@@ -1,0 +1,149 @@
+{
+ "rule": "oracle = pristine image chains; bytes compared per cluster",
+ "files": [
+  {
+   "path": "groundtruth/Alarms/alarm.mp3",
+   "theoretical_bytes": 1028,
+   "size": 1028,
+   "cls": "intact",
+   "name_recoverable": true,
+   "chain_clusters": 1
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
+   "theoretical_bytes": 2087832,
+   "size": 2089359,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
+   "theoretical_bytes": 0,
+   "size": 2090048,
+   "cls": "lost",
+   "note": "no pristine directory entry"
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013658.JPG",
+   "theoretical_bytes": 2088437,
+   "size": 2089968,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013659.JPG",
+   "theoretical_bytes": 2087916,
+   "size": 2089955,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013660.JPG",
+   "theoretical_bytes": 2086282,
+   "size": 2089346,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/G0013661.JPG",
+   "theoretical_bytes": 2088629,
+   "size": 2089652,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.JPG",
+   "theoretical_bytes": 2088671,
+   "size": 2089692,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1021
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
+   "theoretical_bytes": 2793067,
+   "size": 2794599,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 1365
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
+   "theoretical_bytes": 7488372,
+   "size": 7491436,
+   "cls": "partial",
+   "name_recoverable": true,
+   "chain_clusters": 3658
+  },
+  {
+   "path": "groundtruth/DCIM/100GOPRO/GOPR3655.THM",
+   "theoretical_bytes": 11365,
+   "size": 11365,
+   "cls": "intact",
+   "name_recoverable": true,
+   "chain_clusters": 6
+  },
+  {
+   "path": "groundtruth/MISC/SD_INFO.TXT",
+   "theoretical_bytes": 41,
+   "size": 41,
+   "cls": "intact",
+   "name_recoverable": true,
+   "chain_clusters": 1
+  },
+  {
+   "path": "groundtruth/MISC/VERSION.TXT",
+   "theoretical_bytes": 50,
+   "size": 50,
+   "cls": "intact",
+   "name_recoverable": true,
+   "chain_clusters": 1
+  },
+  {
+   "path": "groundtruth/MUSIC/track.mp3",
+   "theoretical_bytes": 2052,
+   "size": 2052,
+   "cls": "intact",
+   "name_recoverable": true,
+   "chain_clusters": 2
+  },
+  {
+   "path": "groundtruth/a file with spaces and a very long name indeed.txt",
+   "theoretical_bytes": 544,
+   "size": 544,
+   "cls": "intact",
+   "name_recoverable": false,
+   "chain_clusters": 1
+  },
+  {
+   "path": "postformat/Android/data/nomedia",
+   "theoretical_bytes": 0,
+   "size": 0,
+   "cls": "lost",
+   "note": "no pristine directory entry"
+  },
+  {
+   "path": "postformat/DCIM/NEWPHOTO.JPG",
+   "theoretical_bytes": 0,
+   "size": 205481,
+   "cls": "lost",
+   "note": "no pristine directory entry"
+  },
+  {
+   "path": "postformat/LOST.DIR/placeholder",
+   "theoretical_bytes": 0,
+   "size": 33,
+   "cls": "lost",
+   "note": "no pristine directory entry"
+  }
+ ],
+ "totals": {
+  "theoretical": 22824286,
+  "size": 25134649
+ }
+}

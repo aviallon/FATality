@@ -78,6 +78,147 @@ def sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def classify_offset(g, off: int) -> str:
+    """Which filesystem structure a byte offset belongs to."""
+    if off < g.part_off:
+        return 'mbr'
+    rel = off - g.part_off
+    sector = rel // g.bps
+    if sector < g.reserved:
+        if sector == 0:
+            return 'boot-sector'
+        if sector == 1:
+            return 'fsinfo'
+        return f'reserved-sector-{sector}'
+    fat_end = g.reserved + g.num_fats * g.fat_sects
+    if sector < fat_end:
+        return 'fat'
+    if off < g.data_off:
+        return 'fat12/16-root'
+    clu = g.cluster_of(off)
+    return f'cluster-{clu}' + ('-ROOT' if clu == 2 else '')
+
+
+def damage(pre: Path, out: Path, seed: int, density: float = 0.002) -> dict:
+    """Seeded random corruption of IMPORTANT structures (reproducible).
+
+    Targets: boot sector, backup boot, FSInfo, FAT copies, the root cluster,
+    plus a seeded scatter of data clusters.  Every damaged span is recorded
+    with its structure label so the theoretical ceiling can be proven from
+    the damage map alone.
+    """
+    import shutil
+
+    import numpy as _np
+
+    from fatality.geometry import scan_geometries
+
+    rng = _np.random.default_rng(seed)
+    with open(pre, 'rb') as f:
+        g = scan_geometries(f, pre.stat().st_size)[0]
+    shutil.copyfile(pre, out)
+    events = []
+
+    def hit(off: int, length: int, why: str):
+        data = rng.integers(0, 256, length, dtype=_np.uint8).tobytes()
+        with open(out, 'r+b') as fo:
+            fo.seek(off)
+            fo.write(data)
+        events.append(dict(offset=off, length=length,
+                           structure=classify_offset(g, off), reason=why))
+
+    # targeted structure damage
+    hit(g.part_off, 512, 'boot sector')
+    hit(g.part_off + 6 * g.bps, 512, 'backup boot sector')
+    hit(g.part_off + 1 * g.bps, 512, 'fsinfo')
+    for i, fo in enumerate(g.fat_off):
+        for _ in range(3):
+            at = fo + int(rng.integers(0, g.fat_sects * g.bps - 4096))
+            hit(at, 4096, f'fat copy {i} random span')
+    hit(g.cluster_off(2), 512, 'root directory')
+
+    # seeded scatter over data clusters (their bytes matter as much as
+    # metadata: corrupting a file's clusters lowers its theoretical ceiling)
+    n_scatter = max(1, int(g.cluster_count * density))
+    for clu in rng.choice(_np.arange(3, g.cluster_count + 2), size=n_scatter,
+                          replace=False):
+        hit(g.cluster_off(int(clu)), 512, 'random data cluster')
+
+    return dict(seed=seed, density=density, events=events,
+                rule='targeted metadata (boot/fsinfo/fat/root) + seeded scatter')
+
+
+def theoretical(scenario: Path, pre: Path, damaged: Path) -> dict:
+    """The OMNISCIENT ceiling: what could be salvaged from the damaged image.
+
+    Oracle = the pristine pre-damage image: its directory entries give each
+    file's chain, its FAT gives the exact clusters, and comparing cluster
+    bytes against the damaged image tells exactly which bytes still exist.
+    No recovery technique can exceed this; the gap is the tool's fault, the
+    ceiling is the damage's fault.
+    """
+    from fatality.fat import load_fats, reconstruct
+    from fatality.geometry import scan_geometries
+    from fatality.scan import scan_fragments, scan_slots
+
+    with open(pre, 'rb') as f:
+        g = scan_geometries(f, pre.stat().st_size)[0]
+        fats = load_fats(f, g)
+        end = g.part_off + (g.part_size or (pre.stat().st_size - g.part_off))
+        frags = scan_fragments(f, g, scan_slots(f, g.data_off, end))
+        pre_entries = {}
+        for fr in frags:
+            for s in fr.entries:
+                if s.name in ('.', '..') or s.is_dir or s.cluster < 2:
+                    continue
+                pre_entries[s.display.lower()] = (s.cluster, s.size, fr.cluster, s.off)
+
+        ceilings = []
+        with open(damaged, 'rb') as fd:
+            for t in load_manifest(scenario):
+                if t.kind != 'file':
+                    continue
+                base = Path(t.path).name.lower()
+                ent = pre_entries.get(base)
+                if ent is None:
+                    ceilings.append(dict(path=t.path, theoretical_bytes=0,
+                                         size=t.size, cls='lost',
+                                         note='no pristine directory entry'))
+                    continue
+                clu, size, dir_clu, slot_off = ent
+                ch = reconstruct(g, fats, clu, size)
+                # byte-precise ceiling: only bytes within [0, size) count
+                intact_bytes = 0
+                remaining = size
+                for c in ch.clusters:
+                    off = g.cluster_off(c)
+                    f.seek(off)
+                    a = f.read(g.cluster_bytes)
+                    fd.seek(off)
+                    b = fd.read(g.cluster_bytes)
+                    take = min(remaining, len(a))
+                    intact_bytes += sum(1 for i in range(take) if a[i] == b[i])
+                    remaining -= take
+                    if remaining <= 0:
+                        break
+                # name survival: the directory slot's cluster intact?
+                f.seek(g.cluster_off(dir_clu))
+                a = f.read(g.cluster_bytes)
+                fd.seek(g.cluster_off(dir_clu))
+                b = fd.read(g.cluster_bytes)
+                name_ok = a == b
+                cls = 'intact' if intact_bytes == size else (
+                    'partial' if intact_bytes else 'lost')
+                ceilings.append(dict(path=t.path, theoretical_bytes=intact_bytes,
+                                     size=size, cls=cls,
+                                     name_recoverable=bool(name_ok),
+                                     chain_clusters=len(ch.clusters)))
+    return dict(rule='oracle = pristine image chains; bytes compared per cluster',
+                files=ceilings,
+                totals=dict(theoretical=sum(c['theoretical_bytes'] for c in ceilings),
+                            size=sum(c['size'] for c in ceilings)))
+
+
 def composite(pre: Path, fmt: Path, out: Path) -> dict:
     """Composite a quick-formatted image over its pre-format snapshot.
 
@@ -151,8 +292,18 @@ def save_manifest(scenario: Path, truths: list[Truth]) -> None:
         dict(files=[asdict(t) for t in truths]), indent=1))
 
 
+def prefix_match(a: bytes, b: bytes) -> int:
+    """Count of leading identical bytes — how much of a partial file is real."""
+    n = min(len(a), len(b))
+    i = 0
+    while i < n and a[i] == b[i]:
+        i += 1
+    return i
+
+
 def score_extraction(manifest: list[Truth], extracted: Path,
-                     named_index: dict[str, Path]) -> RunResult:
+                     named_index: dict[str, Path],
+                     truth_bytes: dict[str, bytes] | None = None) -> RunResult:
     """Score one extraction output tree against the manifest.
 
     `named_index` maps recovered file names (case-insensitive) to paths,
@@ -162,13 +313,18 @@ def score_extraction(manifest: list[Truth], extracted: Path,
     # hash every recovered file once
     rec_hashes: dict[str, list[Path]] = {}
     rec_by_name: dict[str, list[Path]] = {}
+    rec_files: list[tuple[Path, int, bytes]] = []     # (path, size, head 4K)
     if extracted.exists():
         for p in extracted.rglob('*'):
             if not p.is_file() or p.suffix in ('.json', '.md'):
                 continue
-            h = sha256_bytes(p.read_bytes())
-            rec_hashes.setdefault(h, []).append(p)
+            with open(p, 'rb') as fh:
+                head = fh.read(4096)
+                fh.seek(0)
+                data = fh.read()
+            rec_hashes.setdefault(sha256_bytes(data), []).append(p)
             rec_by_name.setdefault(p.name.lower(), []).append(p)
+            rec_files.append((p, len(data), head))
 
     res = RunResult(scenario='', image=str(extracted))
     matched_files: set[Path] = set()
@@ -186,23 +342,35 @@ def score_extraction(manifest: list[Truth], extracted: Path,
             s.evidence = f'content match: {hits[0]}'
             matched_files.update(hits)
         else:
-            # partial: same name recovered but content differs
-            cands = rec_by_name.get(base, [])
+            tb = truth_bytes.get(t.path) if truth_bytes else None
+            # candidate channels: name matches (incl. empty stubs from
+            # directory extraction) AND content-fingerprint matches (carves
+            # with generated names).  Take the BEST, never the first.
+            cands = list(rec_by_name.get(base, []))
+            if tb is not None:
+                head = tb[:4096]
+                cands += [p for p, sz, hd in rec_files
+                          if p not in cands and len(hd) >= 64
+                          and hd == head[:len(hd)] and 0 < sz <= 4 * t.size]
             if cands:
-                best = max(cands, key=lambda p: p.stat().st_size)
                 matched_files.update(cands)
-                got = best.stat().st_size
+                if tb is not None:
+                    got, best = max(((prefix_match(p.read_bytes(), tb), p)
+                                     for p in cands), key=lambda x: x[0])
+                else:
+                    best = max(cands, key=lambda p: p.stat().st_size)
+                    got = best.stat().st_size
                 if 0 < got < t.size:
                     s.cls = 'partial'
                     s.bytes_recovered = got
-                    s.evidence = f'name match, {got}/{t.size} bytes: {best}'
+                    s.evidence = f'best match {got}/{t.size} bytes: {best}'
                 elif got >= t.size:
                     s.cls = 'partial'
                     s.bytes_recovered = t.size
-                    s.evidence = f'name match, content differs: {best}'
+                    s.evidence = f'content match beyond size: {best}'
                 else:
                     s.cls = 'name-only'
-                    s.evidence = f'name match, empty: {best}'
+                    s.evidence = f'name/fingerprint match, no usable bytes: {best}'
             elif s.name_found:
                 s.cls = 'name-only'
                 s.evidence = 'name recovered (entry/record), no content'
@@ -254,7 +422,8 @@ def compare(baseline: dict, current: RunResult, tolerance: float = 0.0) -> dict:
                 verdict='FAIL' if regressions > tolerance else 'PASS')
 
 
-def render_report(scenario: str, current: RunResult, comp: dict) -> str:
+def render_report(scenario: str, current: RunResult, comp: dict,
+                  theoretical: dict | None = None) -> str:
     """Markdown report for GitHub's step summary."""
     lines = [f'# Recovery regression report — {scenario}', '']
     c = current.counts()
@@ -281,6 +450,26 @@ def render_report(scenario: str, current: RunResult, comp: dict) -> str:
                          f"{d['cur']} | {d['bytes']} |")
     else:
         lines.append('No per-file differences vs baseline.')
+    if theoretical:
+        lines.append('')
+        lines.append('## Retrieved vs theoretical ceiling')
+        lines.append('| path | ceiling bytes | retrieved | efficiency |')
+        lines.append('|---|---|---|---|')
+        got_by = {s.path: s.bytes_recovered for s in current.scores}
+        tot_ceil = tot_got = 0
+        for f in theoretical['files']:
+            ceil = f['theoretical_bytes']
+            got = got_by.get(f['path'], 0)
+            tot_ceil += ceil
+            tot_got += got
+            eff = (100.0 * got / ceil) if ceil else 0.0
+            lines.append(f"| `{f['path']}` | {ceil} | {got} | {eff:.1f}% |")
+        eff_all = (100.0 * tot_got / tot_ceil) if tot_ceil else 0.0
+        lines.append('')
+        lines.append(f'**Overall salvage efficiency: {tot_got}/{tot_ceil} bytes '
+                     f'= {eff_all:.1f}% of the theoretical maximum.**')
+        lines.append(f"(ceiling damaged away: "
+                     f"{sum(f['size'] for f in theoretical['files']) - tot_ceil} bytes)")
     return '\n'.join(lines) + '\n'
 
 
@@ -310,8 +499,12 @@ def cmd_run(args) -> int:
     for it in fat_manifest['items']:
         if it.get('name'):
             named[it['name'].lower()] = Path(it['path'])
-    # 3) score
-    res = score_extraction(load_manifest(sc), out / 'extracted', named)
+    # 3) score (with ground-truth bytes for precise partial measurement)
+    manifest = load_manifest(sc)
+    truth_bytes = {t.path: (sc / t.path).read_bytes()
+                   for t in manifest
+                   if t.kind == 'file' and (sc / t.path).exists()}
+    res = score_extraction(manifest, out / 'extracted', named, truth_bytes)
     res.scenario = sc.name
     res.image = str(img)
     (out / 'results.json').write_text(json.dumps(asdict(res), indent=1))
@@ -331,20 +524,50 @@ def cmd_report(args) -> int:
     res_raw = json.loads(results_path.read_text())
     res_raw['scores'] = [Score(**s) for s in res_raw['scores']]
     res = RunResult(**res_raw)
+    th = None
+    th_path = Path(args.theoretical) if args.theoretical else (
+        results_path.parent / 'theoretical.json')
+    if th_path.exists():
+        th = json.loads(th_path.read_text())
     exp = sc / 'expected.json'
+    if args.baseline:
+        exp = Path(args.baseline)
     if not exp.exists():
         rep = (f'# Recovery report — {sc.name}\n\n**No blessed baseline yet.**\n\n'
-               + render_report(sc.name, res, compare({}, res)))
+               + render_report(sc.name, res, compare({}, res), th))
         Path(args.out).write_text(rep) if args.out else print(rep)
         print('baseline missing: report-only mode (no FAIL possible)',
               file=sys.stderr)
         return 0
     comp = compare(json.loads(exp.read_text()), res, tolerance=args.tolerance)
-    rep = render_report(sc.name, res, comp)
+    rep = render_report(sc.name, res, comp, th)
     if args.out:
         Path(args.out).write_text(rep)
     print(rep)
     return 0 if comp['verdict'] == 'PASS' else 1
+
+
+def cmd_damage(args) -> int:
+    sc = Path(args.scenario)
+    outdir = Path(args.out)
+    outdir.mkdir(parents=True, exist_ok=True)
+    stats = damage(Path(args.pre), outdir / 'image-damaged.vfat', args.seed,
+                   density=args.density)
+    (outdir / 'damage.json').write_text(json.dumps(stats, indent=1))
+    th = theoretical(sc, Path(args.pre), outdir / 'image-damaged.vfat')
+    (outdir / 'theoretical.json').write_text(json.dumps(th, indent=1))
+    print(json.dumps(dict(seed=stats['seed'], events=len(stats['events']),
+                          ceiling=th['totals']), indent=1))
+    print('written', outdir / 'damage.json', 'and', outdir / 'theoretical.json')
+    return 0
+
+
+def cmd_theoretical(args) -> int:
+    th = theoretical(Path(args.scenario), Path(args.pre), Path(args.damaged))
+    if args.out:
+        Path(args.out).write_text(json.dumps(th, indent=1))
+    print(json.dumps(th['totals'], indent=1))
+    return 0
 
 
 def cmd_compose(args) -> int:
@@ -367,6 +590,21 @@ def main(argv=None) -> int:
     p.add_argument('-o', '--out')
     p.set_defaults(fn=cmd_run)
 
+    p = sub.add_parser('damage')
+    p.add_argument('scenario')
+    p.add_argument('pre', help='pristine pre-damage image (image-prefmt.vfat)')
+    p.add_argument('-o', '--out', required=True)
+    p.add_argument('--seed', type=int, default=42)
+    p.add_argument('--density', type=float, default=0.002)
+    p.set_defaults(fn=cmd_damage)
+
+    p = sub.add_parser('theoretical')
+    p.add_argument('scenario')
+    p.add_argument('pre')
+    p.add_argument('damaged')
+    p.add_argument('-o', '--out')
+    p.set_defaults(fn=cmd_theoretical)
+
     p = sub.add_parser('composite')
     p.add_argument('pre', help='pre-format snapshot (image-prefmt.vfat)')
     p.add_argument('formatted', help='quick-formatted image (image.vfat)')
@@ -378,6 +616,8 @@ def main(argv=None) -> int:
     p.add_argument('results')
     p.add_argument('-o', '--out')
     p.add_argument('--tolerance', type=float, default=0.0)
+    p.add_argument('--baseline', help='alternate expected.json (variants)')
+    p.add_argument('--theoretical', help='theoretical.json (ceiling report)')
     p.set_defaults(fn=cmd_report)
     args = ap.parse_args(argv)
     return args.fn(args)

@@ -117,7 +117,8 @@ def test_results_json_roundtrip(tmp_path):
     sc = tmp_path / 'scenario'
     sc.mkdir()
     args = type('Args', (), dict(scenario=str(sc), results=str(results),
-                                 out=None, tolerance=0.0))
+                                 out=None, tolerance=0.0,
+                                 baseline=None, theoretical=None))
     assert cmd_report(args) == 0          # no baseline -> report-only
 
 
@@ -149,3 +150,24 @@ def test_composite_heals_data_but_not_metadata(tmp_path):
     assert out[DATA_OFF + 2 * 512:DATA_OFF + 2 * 512 + 8] == b'NEW-DATA'
     # root cluster (2) keeps its formatted zeros: NOT healed
     assert out[DATA_OFF:DATA_OFF + 32] == bytes(32)
+
+
+def test_best_candidate_attribution(tmp_path):
+    """Regression: an empty dir-entry stub with the right NAME must not
+    shadow a content-matching carve with a generated name — the scorer
+    takes the BEST candidate across name and fingerprint channels."""
+    gt = tmp_path / 'groundtruth'
+    gt.mkdir()
+    truth = b'\xff\xd8\xff' + b'A' * 5000 + b'\xff\xd9'
+    (gt / 'PHOTO.JPG').write_bytes(truth)
+    ts = build_manifest(tmp_path)
+    ex = tmp_path / 'extracted'
+    (ex / 'tree').mkdir(parents=True)
+    (ex / 'tree' / 'PHOTO.JPG').write_bytes(b'')          # empty stub, right name
+    (ex / 'carved').mkdir()
+    (ex / 'carved' / 'jpeg_off999').write_bytes(truth[:4000])  # partial carve
+    res = score_extraction(ts, ex, {},
+                           {'groundtruth/PHOTO.JPG': truth})
+    s = res.scores[0]
+    assert s.cls == 'partial'
+    assert s.bytes_recovered == 4000, s.evidence

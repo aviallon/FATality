@@ -115,6 +115,30 @@ def _parse_bpb(src: str, vol_off: int, vol_size: int, bs: bytes) -> Geometry | N
     return g
 
 
+def geometry_from_mbr_only(f, size: int) -> Geometry | None:
+    """Last-resort geometry when every boot sector is destroyed.
+
+    Bounds come from the MBR partition entry alone; cluster size is a
+    best-guess (4KiB) used only for slot grouping and contiguity — carving
+    and content handlers work regardless.  Marked 'mbr-no-bpb' so reports
+    state that the layout was inferred, not read.
+    """
+    f.seek(0)
+    mbr = f.read(512)
+    if len(mbr) < 512 or mbr[510:512] != b'\x55\xaa':
+        return None
+    for i in range(4):
+        ent = mbr[0x1BE + 16 * i:0x1CE + 16 * i]
+        lba, sects = struct.unpack('<II', ent[8:16])
+        if lba and sects:
+            g = Geometry(source='mbr-no-bpb', part_off=lba * 512,
+                         part_size=sects * 512, bps=512, spc=8,
+                         reserved=32, num_fats=2, fat_sects=1,
+                         root_entries=0, root_cluster=2, fat_bits=32)
+            return g
+    return None
+
+
 def scan_geometries(f, size: int) -> list[Geometry]:
     """All plausible geometries: partitioned and stale/superfloppy boot sectors."""
     geos: list[Geometry] = []

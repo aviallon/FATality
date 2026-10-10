@@ -54,13 +54,28 @@ jobs:
             img=""
             if [ -f "$s/image.vfat.gz" ]; then img="$s/image.vfat.gz"; fi
             if [ -f "$s/image.vfat" ]; then img="$s/image.vfat"; fi
-            if [ -z "$img" ]; then
+            if [ -n "$img" ]; then
+              .venv/bin/python tools/scenario.py run "$s" "$img" -o "$s/last-run"
+              .venv/bin/python tools/scenario.py report "$s" "$s/last-run/results.json" \
+                -o "$s/last-run/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
               echo "::notice::scenario $name: no blessed image yet (run windows-scenario-image)"
-              continue
             fi
-            .venv/bin/python tools/scenario.py run "$s" "$img" -o "$s/last-run"
-            .venv/bin/python tools/scenario.py report "$s" "$s/last-run/results.json" \
-              -o "$s/last-run/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
+            for v in "$s"variants/*/; do
+              [ -d "$v" ] || continue
+              vname=$(basename "$v")
+              vimg="$v/image-damaged.vfat.gz"
+              [ -f "$vimg" ] || vimg="$v/image-damaged.vfat"
+              [ -f "$vimg" ] || continue
+              .venv/bin/python tools/scenario.py run "$s" "$vimg" -o "$v/run"
+              args=""
+              [ -f "$v/expected.json" ] && args="--baseline $v/expected.json"
+              [ -f "$v/theoretical.json" ] && args="$args --theoretical $v/theoretical.json"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### variant: $name/$vname" >> "$GITHUB_STEP_SUMMARY"
+              .venv/bin/python tools/scenario.py report "$s" "$v/run/results.json" $args \
+                -o "$v/run/report.md" | tee -a "$GITHUB_STEP_SUMMARY"
+            done
           done
 
       - uses: actions/upload-artifact@v4

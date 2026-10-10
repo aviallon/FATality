@@ -37,17 +37,28 @@ EXT_HANDLER = {'.jpg': 'jpeg', '.jpeg': 'jpeg', '.thm': 'jpeg',
                '.mp4': 'mp4', '.lrv': 'mp4', '.mov': 'mp4'}
 
 
+def _primary_geometry(f, size: int):
+    """Best geometry: real BPB if any survives, else MBR-inferred; None =
+    nothing to work with (caller exits cleanly rather than crashing)."""
+    from .geometry import geometry_from_mbr_only
+    geos = scan_geometries(f, size)
+    if geos:
+        return geos[0]
+    return geometry_from_mbr_only(f, size)
+
+
 def cmd_scan(args) -> int:
     img = Path(args.image)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     size = img.stat().st_size
     with open(img, 'rb') as f:
-        geos = scan_geometries(f, size)
-        print(f'geometries: {len(geos)}')
-        report = dict(image=str(img), size=size,
-                      geometries=[g.summary() for g in geos])
-        g = geos[0]
+        g = _primary_geometry(f, size)
+        if g is None:
+            print('no usable geometry: MBR and all boot sectors unreadable',
+                  file=sys.stderr)
+            return 2
+        report = dict(image=str(img), size=size, geometries=[g.summary()])
         print(f'primary: {g.summary()}')
 
         fats = load_fats(f, g)
@@ -86,9 +97,12 @@ def cmd_extract(args) -> int:
     counts = dict(phantom=0, degraded=0)
 
     with open(img, 'rb') as f:
-        geos = scan_geometries(f, size)
-        man.geometries = [g.summary() for g in geos]
-        g = geos[0]
+        g = _primary_geometry(f, size)
+        if g is None:
+            print('no usable geometry: MBR and all boot sectors unreadable',
+                  file=sys.stderr)
+            return 2
+        man.geometries = [g.summary()]
         end = g.part_off + (g.part_size or (size - g.part_off))
         fats = load_fats(f, g)
 
