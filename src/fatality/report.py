@@ -54,7 +54,7 @@ class Manifest:
         return '\n'.join(lines) + '\n'
 
     def summary(self) -> dict:
-        by = {}
+        by: dict[str, int] = {}
         for i in self.items:
             by[i.status] = by.get(i.status, 0) + 1
         return dict(items=len(self.items), by_status=by, ghosts=len(self.ghosts))

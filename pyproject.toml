@@ -8,7 +8,7 @@ dependencies = [ "numpy>=2.0" ]
 
 [project.optional-dependencies]
 verify = [ "pillow>=10.0" ]
-dev = [ "pytest>=8.0", "pillow>=10.0" ]
+dev = [ "pytest>=8.0", "pillow>=10.0", "mypy>=1.11", "ruff>=0.6", "types-pillow" ]
 
 [project.scripts]
 fatality = "fatality.cli:main"
@@ -19,3 +19,23 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [ "src/fatality" ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [ "E", "F", "W", "I", "B", "UP", "SIM" ]
+ignore = ["SIM108"]   # ternaries are not automatically clearer
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/fatality"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+ignore_missing_imports = true

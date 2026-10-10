@@ -64,4 +64,4 @@ def by_name(n: str) -> Handler:
 
 
 # import for registration side effects
-from . import jpeg, mp4, gopro  # noqa: E402,F401
+from . import gopro, jpeg, mp4  # noqa: E402,F401

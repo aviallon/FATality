@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 import struct
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -227,7 +228,7 @@ ALL_STRUCTS = (PARTITION_ENTRY, BPB, FSINFO, DIRENT, LFNENT)
 
 def export() -> dict:
     """The whole schema as JSON-able data (docs, other languages, diffs)."""
-    out = {'structs': {}}
+    out: dict[str, Any] = {'structs': {}}
     for s in ALL_STRUCTS:
         out['structs'][s.name] = dict(
             size=s.size, doc=s.doc,

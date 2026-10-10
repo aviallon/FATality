@@ -10,11 +10,9 @@ Proven techniques:
 """
 from __future__ import annotations
 
-import io
 import re
 import struct
 import subprocess
-from pathlib import Path
 
 from . import ExtractResult, Handler, Validation, register
 

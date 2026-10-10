@@ -20,8 +20,14 @@ from pathlib import Path
 import pytest
 
 from fatality.carve.mp4_reassemble import (
-    FileModel, _cluster_grid, nal_walk_ok, devc_walk_ok, parse_moov,
-    reconcile_maps, reassemble, walk_atoms,
+    FileModel,
+    _cluster_grid,
+    devc_walk_ok,
+    nal_walk_ok,
+    parse_moov,
+    reassemble,
+    reconcile_maps,
+    walk_atoms,
 )
 from fatality.geometry import Geometry
 
@@ -81,12 +87,10 @@ def _fake_sample(size: int, nals: list[int], seed: int) -> bytes:
     """AVCC sample: `nals` NAL units of the given payload lengths."""
     assert sum(4 + n for n in nals) == size
     out = b''
-    k = 0
-    for n in nals:
+    for k, n in enumerate(nals):
         payload = bytes(((seed * 37 + k + j * 17) ^ (j >> 8)) & 0xFF
                         for j in range(n))
         out += struct.pack('>I', n) + payload
-        k += 1
     return out
 
 
@@ -105,9 +109,9 @@ def _build_file(sample_specs: list[tuple[list[int], int]]) -> tuple[bytes, list,
         body += _descriptor(sizes[i]) + _fake_sample(sizes[i], nals, seed)
         off += 16 + sizes[i]
     mdat = _atom(b'mdat', body)
-    samples = [(d + 16, s) for d, s in zip(desc_offs, sizes)]
+    samples = [(d + 16, s) for d, s in zip(desc_offs, sizes, strict=False)]
     ftyp = _atom(b'ftyp', b'mp41' + b'\x00' * 4 + b'mp41')
-    moov_off = 20 + len(mdat)
+    20 + len(mdat)
     moov = _moov(samples, desc_offs)
     return ftyp + mdat + moov, samples, desc_offs
 
@@ -399,7 +403,7 @@ def test_gold_gopr3655_decodes_clean(gold):
                        capture_output=True, text=True)
     sig = ('concealing', 'error while decoding', 'corrupt',
            'failed to parse', 'sps_id')
-    bad = [l for l in p.stderr.splitlines() if any(s in l.lower() for s in sig)]
+    bad = [ln for ln in p.stderr.splitlines() if any(s in ln.lower() for s in sig)]
     assert bad == []
 
 

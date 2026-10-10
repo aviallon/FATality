@@ -13,7 +13,9 @@ import re
 
 from . import ExtractResult, Handler, Validation, register
 
-PATH_REC_RE = re.compile(rb'[A-Z]:\\[\x20-\x7e]{2,60}|[\x20-\x7e]{2,20}\\[\x20-\x7e]{2,60}\\[\x20-\x7e]{1,20}\.[A-Za-z]{3}')
+PATH_REC_RE = re.compile(
+    rb'[A-Z]:\\[\x20-\x7e]{2,60}'
+    rb'|[\x20-\x7e]{2,20}\\[\x20-\x7e]{2,60}\\[\x20-\x7e]{1,20}\.[A-Za-z]{3}')
 GOPRO_NAME_RE = re.compile(r'(GOPR|GH0\d|GL0\d|GX0\d|GPFR|G)(\d{4})\.([A-Z]{3})')
 DT_RE = re.compile(rb'20\d\d:\d\d:\d\d \d\d:\d\d:\d\d')
 

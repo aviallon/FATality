@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .dirtree import ATTR_LFN, VALID_ATTRS, NAME_CHARS, parse_slot, Slot
+from .dirtree import ATTR_LFN, NAME_CHARS, VALID_ATTRS, Slot, parse_slot
 from .geometry import Geometry
 
 

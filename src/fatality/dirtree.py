@@ -8,7 +8,6 @@ never merge unrelated evidence).
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 from . import schema
@@ -213,7 +212,7 @@ def is_fragment(slots: list[Slot], min_entries: int = 2) -> bool:
         return False
     # require at least one adjacent pair (two valid slots exactly 32B apart)
     by_off = sorted((s.off, s) for s in slots if s.kind in ('entry', 'lfn'))
-    adjacent = any(b[0] - a[0] == 32 for a, b in zip(by_off, by_off[1:]))
+    adjacent = any(b[0] - a[0] == 32 for a, b in zip(by_off, by_off[1:], strict=False))
     if not adjacent:
         return False
     dots = sum(1 for s in entries if s.name in ('.', '..'))

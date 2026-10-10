@@ -1,9 +1,8 @@
 """Directory slot parsing, LFN reassembly, fragment linking."""
-from fatality.dirtree import (is_fragment, lfn_checksum, merge_lfns,
-                              parse_slot)
-from fatality.trees import link_fragments, tree_label
-
 from conftest import lfn_entries, short_entry
+
+from fatality.dirtree import is_fragment, lfn_checksum, merge_lfns, parse_slot
+from fatality.trees import link_fragments, tree_label
 
 
 def test_short_entry_roundtrip():
@@ -35,7 +34,6 @@ def test_lfn_checksum_validation_rejects_mismatch():
 
 
 def test_adjacency_discriminates_fragments():
-    from fatality.dirtree import DirFragment
     a = parse_slot(short_entry(b'FILE', b'TXT', 5, 11), 0)
     b = parse_slot(short_entry(b'FILE2', b'TXT', 6, 11), 32)
     far = parse_slot(short_entry(b'FILE3', b'TXT', 7, 11), 4096)

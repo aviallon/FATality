@@ -8,7 +8,7 @@ module can return SEVERAL candidate geometries, newest first.
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from . import schema
 

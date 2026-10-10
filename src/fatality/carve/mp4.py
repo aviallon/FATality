@@ -15,10 +15,10 @@ import json
 import struct
 import subprocess
 from dataclasses import dataclass, field
+from typing import Any
 
 from . import ExtractResult, Handler, Validation, register
-from .mp4_reassemble import (MoovMetadata, ReassemblyResult, SampleStats,
-                             reassemble)
+from .mp4_reassemble import MoovMetadata, ReassemblyResult, SampleStats, reassemble
 
 __all__ = ['Atom', 'SampleTable', 'walk_atoms', 'parse_moov', 'gp_descriptors',
            'nal_walk_ok', 'Mp4Handler', 'reassemble', 'ReassemblyResult',
@@ -70,9 +70,9 @@ def walk_atoms(data: bytes, start: int = 0, end: int | None = None,
     return out
 
 
-def parse_moov(data: bytes, moov: Atom) -> dict:
+def parse_moov(data: bytes, moov: Atom) -> dict[str, Any]:
     """Sample tables + metadata of one moov atom (raw bytes)."""
-    info = dict(creation=0, duration=0, timescale=0, tracks=[])
+    info: dict[str, Any] = dict(creation=0, duration=0, timescale=0, tracks=[])
     for a in walk_atoms(data, moov.off, moov.off + moov.size):
         body = a.off + a.header
         if a.kind == b'mvhd':
@@ -156,7 +156,7 @@ class Mp4Handler(Handler):
         total = max(a.off + a.size for a in atoms)
         res = ExtractResult(status='partial', size=total,
                             extras={'atoms': [(a.off, a.size, a.kind.decode('latin-1'))
-                                              for a in atoms if a.header == 8 or True][:64]})
+                                              for a in atoms if True][:64]})
         moovs = [a for a in atoms if a.kind == b'moov']
         mdats = [a for a in atoms if a.kind == b'mdat']
         if moovs:

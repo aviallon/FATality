@@ -84,7 +84,7 @@ def build_fat32_image() -> bytearray:
       clu4: 'fake-jpeg-payload' bytes
       clu5: 'hello fatality' payload (11 bytes)
     """
-    img = bytearray((DATA_OFF + 16 * SPC * BPS))
+    img = bytearray(DATA_OFF + 16 * SPC * BPS)
     # boot sector (FAT32 BPB)
     bs = bytearray(512)
     bs[0:3] = b'\xeb\x58\x90'
@@ -113,7 +113,8 @@ def build_fat32_image() -> bytearray:
     # FATs: chain root(2)->EOF, DCIM(3)->EOF, photo(4)->EOF, hello(5)->EOF
     for fat_i in range(NUM_FATS):
         fat = bytearray(FAT_SECTS * BPS)
-        def put(c, v):
+
+        def put(c, v, fat=fat):     # bind: closure must capture THIS copy
             struct.pack_into('<I', fat, c * 4, v)
         put(0, 0x0FFFFFF8)
         put(1, 0x0FFFFFFF)

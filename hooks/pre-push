@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# FATality pre-push: analyzers AND the full test suite must be green.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+PY=.venv/bin
+if [ ! -x "$PY/pytest" ]; then
+    echo "pre-push: .venv missing — run: nix develop -c uv pip install -e '.[dev]'" >&2
+    exit 1
+fi
+
+echo "pre-push: ruff"
+"$PY/ruff" check src tests
+echo "pre-push: mypy"
+"$PY/mypy"
+echo "pre-push: pytest"
+"$PY/python" -m pytest tests/ -q
+echo "pre-push: OK"

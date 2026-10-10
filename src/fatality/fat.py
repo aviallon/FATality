@@ -105,10 +105,11 @@ def merge_fats(tables: list[FatTable]) -> dict[int, int]:
                 continue
             votes.setdefault(i, {}).setdefault(m, 0)
             votes[i][m] += 1
-    return {i: max(d, key=d.get) for i, d in votes.items() if max(d.values()) >= 2}
+    return {i: max(d, key=lambda k: d[k]) for i, d in votes.items() if max(d.values()) >= 2}
 
 
-def contiguous_chain(gz: Geometry, start: int, size: int, cluster_bytes: int | None = None) -> Chain:
+def contiguous_chain(gz: Geometry, start: int, size: int,
+                     cluster_bytes: int | None = None) -> Chain:
     """The sequential-allocation hypothesis: start..start+n-1."""
     cb = cluster_bytes or gz.cluster_bytes
     n = max(1, (size + cb - 1) // cb)

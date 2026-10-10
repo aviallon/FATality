@@ -1,11 +1,10 @@
 """Schema layer: field tables are the single source of on-disk offsets."""
 import json
 
+from conftest import build_fat32_image, lfn_checksum, lfn_entries, short_entry
+
 from fatality import schema
 from fatality.geometry import scan_geometries
-from fatality.dirtree import parse_slot
-
-from conftest import build_fat32_image, lfn_checksum, lfn_entries, short_entry
 
 
 def test_dirent_schema_roundtrip():

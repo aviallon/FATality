@@ -64,8 +64,18 @@ Pipeline stages:
 ```sh
 nix develop            # python, uv, verification tools
 uv venv .venv && uv pip install -e '.[dev]'
+git config core.hooksPath hooks   # install the committed hooks
 pytest                 # synthetic FAT-image fixtures
 ```
+
+Quality gates (all green, all enforced):
+
+- **ruff** + **mypy** — `pre-commit` hook runs both on every commit;
+  `pre-push` re-runs them plus the full test suite.
+- **CI** (GitHub Actions) runs the identical checks on every push/PR —
+  hooks can be bypassed locally, CI cannot.
+- `fatality schema` dumps the on-disk structure model (see `src/fatality/schema.py`)
+  as JSON — parsing is schema-driven, field offsets live in one place.
 
 ## Status
 

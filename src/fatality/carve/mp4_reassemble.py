@@ -45,11 +45,12 @@ import re
 import shutil
 import struct
 import subprocess
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import reduce
 from math import gcd
 from pathlib import Path
-from typing import BinaryIO, Iterable, Sequence
+from typing import Any, BinaryIO
 
 from ..geometry import Geometry
 
@@ -105,7 +106,7 @@ def find_atoms(data: bytes, path: str | bytes,
                 else:
                     yield from rec(a.off + a.header, a.off + a.size, depth + 1)
 
-    return rec(start, end, 0)
+    return rec(start, end if end is not None else len(data), 0)
 
 
 # ---------------------------------------------------------------- moov ----
@@ -439,8 +440,8 @@ def scan_image(f: BinaryIO, work_dir: Path | None = None) -> ScanIndex:
                 pass                                   # stale/corrupt cache: rescan
 
     descriptors: dict[str, list[int]] = {}
-    moovs: list[tuple[int, int]] = []
-    ftyps: list[int] = []
+    moovs: list[Any] = []
+    ftyps: list[Any] = []
     chunk = 64 << 20
     base = 0
     f.seek(0)
@@ -817,7 +818,7 @@ def decode_error_count(sample: bytes, track: Track | None) -> int | None:
     proc = subprocess.run(
         ['ffmpeg', '-v', 'error', '-f', 'h264', '-i', 'pipe:', '-f', 'null', '-'],
         input=pre + body, capture_output=True, timeout=60)
-    lines = [l for l in proc.stderr.decode('latin-1', 'replace').splitlines() if l.strip()]
+    lines = [ln for ln in proc.stderr.decode('latin-1', 'replace').splitlines() if ln.strip()]
     return len(lines)
 
 
@@ -870,7 +871,7 @@ def _assemble(f: BinaryIO, out_path: Path, file_size: int,
     written = 0
     nzero = 0
     with open(out_path, 'wb') as fo:
-        for a, b in zip(bounds, bounds[1:]):
+        for a, b in zip(bounds, bounds[1:], strict=False):
             if b <= a:
                 continue
             best = None
@@ -915,7 +916,8 @@ class SampleStats:
 
 
 def _verify_output(model: FileModel, out_path: Path
-                   ) -> tuple[SampleStats, list[int], list[tuple[int, int]], int, list[tuple[int, int]]]:
+                   ) -> tuple[SampleStats, list[int], list[tuple[int, int]],
+                             int, list[tuple[int, int]]]:
     """Verify the rebuilt file against the moov contract.
 
     * every known 16-byte descriptor must match its expected content
@@ -978,12 +980,12 @@ def _verify_output(model: FileModel, out_path: Path
                     zero_ranges.append((pos + mm.start(), pos + mm.end()))
             pos += len(buf)
     merged: list[tuple[int, int]] = []
-    for a, b in zero_ranges:
-        if merged and a <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+    for z0, z1 in zero_ranges:
+        if merged and z0 <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], z1))
         else:
-            merged.append((a, b))
-    zero_bytes = sum(b - a for a, b in merged)
+            merged.append((z0, z1))
+    zero_bytes = sum(e - s for s, e in merged)
     return stats, bad_descs, bad_vid, zero_bytes, merged
 
 
@@ -1091,7 +1093,7 @@ def reconcile_maps(maps: list[dict], max_rounds: int = 20000) -> dict:
                         keys2.append(key)
             idxs = affected(keys2)
             base = local_total(idxs)
-            best = (base, None)
+            best: tuple[int, Any] = (base, None)
             combos: list = [(k, v) for k in keys for v in doms[k]['cands']
                             if v != doms[k]['chosen']]
             for k1, k2 in itertools.combinations(keys2, 2):
@@ -1152,7 +1154,8 @@ class MoovMetadata:
 @dataclass
 class ReassemblyResult:
     """Outcome of one reassembly (see reassemble())."""
-    status: str = 'metadata-only'                       # set by reassemble(): 'complete' | 'partial' | 'metadata-only'
+    status: str = 'metadata-only'      # reassemble() sets: 'complete' | 'partial'
+                                       # | 'metadata-only'
     bytes_written: int = 0
     missing_ranges: list[tuple[int, int]] = field(default_factory=list)
     sample_stats: SampleStats = field(default_factory=SampleStats)
@@ -1306,6 +1309,10 @@ def reassemble(f: BinaryIO, gz: Geometry, off: int, out_path: Path,
     atoms_found = [f'ftyp@0 (size {ftyp_size})']
     if mdat_size:
         atoms_found.append(f'mdat@{ftyp_size} (size {mdat_size})')
+    if moov_file_off is None:
+        res.status = 'metadata-only'
+        res.notes.append('ftyp found but no moov: metadata only')
+        return res
 
     # ---- locate and validate the moov (level 1 first, then the scan) ----
     info: MoovInfo | None = None
@@ -1386,7 +1393,8 @@ def reassemble(f: BinaryIO, gz: Geometry, off: int, out_path: Path,
         stats, bad_descs, bad_vid, zero_bytes, zero_ranges = _verify_output(model, out_path)
         res.sample_stats = stats
         res.notes.append(
-            f'verify: descriptors {stats.descriptors_ok}/{stats.descriptors_ok + stats.descriptors_bad} ok, '
+            f'verify: descriptors {stats.descriptors_ok}/'
+            f'{stats.descriptors_ok + stats.descriptors_bad} ok, '
             f'nal {stats.nal_ok}/{stats.nal_ok + stats.nal_bad} ok, '
             f'gpmd {stats.gpmd_ok}/{stats.gpmd_ok + stats.gpmd_bad} ok, '
             f'zero bytes {zero_bytes}')

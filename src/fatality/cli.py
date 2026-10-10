@@ -231,14 +231,28 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog='fatality')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
-    p = sub.add_parser('scan'); p.add_argument('image'); p.add_argument('-o', '--out', default='fatality-out')
+    p = sub.add_parser('scan')
+    p.add_argument('image')
+    p.add_argument('-o', '--out', default='fatality-out')
     p.set_defaults(fn=cmd_scan)
-    p = sub.add_parser('extract'); p.add_argument('image'); p.add_argument('-o', '--out', default='fatality-out')
+
+    p = sub.add_parser('extract')
+    p.add_argument('image')
+    p.add_argument('-o', '--out', default='fatality-out')
     p.add_argument('--max-carve', type=int, default=10_000)
     p.set_defaults(fn=cmd_extract)
-    p = sub.add_parser('verify'); p.add_argument('out'); p.set_defaults(fn=cmd_verify)
-    p = sub.add_parser('report'); p.add_argument('out'); p.set_defaults(fn=cmd_report)
-    p = sub.add_parser('schema'); p.add_argument('-o', '--out'); p.set_defaults(fn=cmd_schema)
+
+    p = sub.add_parser('verify')
+    p.add_argument('out')
+    p.set_defaults(fn=cmd_verify)
+
+    p = sub.add_parser('report')
+    p.add_argument('out')
+    p.set_defaults(fn=cmd_report)
+
+    p = sub.add_parser('schema')
+    p.add_argument('-o', '--out')
+    p.set_defaults(fn=cmd_schema)
 
     args = ap.parse_args(argv)
     return args.fn(args)
