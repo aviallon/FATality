@@ -34,7 +34,7 @@ def find_eoi(data: bytes) -> int | None:
         if m == 0xDA:                       # SOS: entropy follows
             seglen = struct.unpack('>H', data[i + 2:i + 4])[0]
             k = data.find(b'\xff\xd9', i + 2 + seglen)
-            return k
+            return k if k >= 0 else None
         if 0xD0 <= m <= 0xD7 or m == 0x01:
             i += 2
             continue

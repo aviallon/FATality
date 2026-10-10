@@ -87,13 +87,10 @@ def parse_slot(b: bytes, off: int) -> Slot | None:
     if attr not in VALID_ATTRS:
         return None
     deleted = first == 0xE5
-    crt_d = fat_date(int.from_bytes(b[16:18], 'little'))
-    acc_d = fat_date(int.from_bytes(b[18:20], 'little'))
-    wr_d = fat_date(int.from_bytes(b[24:26], 'little'))
-    if crt_d is None and acc_d is None and wr_d is None:
-        return None
 
     if attr == ATTR_LFN:
+        # LFN slots: the bytes that look like dates are UTF-16 name payload —
+        # no date gate here (that gate is for short entries only)
         seq = first & 0x1F
         if not 1 <= seq <= 20:
             return None
@@ -105,7 +102,13 @@ def parse_slot(b: bytes, off: int) -> Slot | None:
         if not txt or any(ord(c) < 32 for c in txt):
             return None
         return Slot(off=off, raw=b, kind='lfn', deleted=deleted, name=txt,
-                    wr_date=wr_d)
+                    wr_date=None)
+
+    crt_d = fat_date(int.from_bytes(b[16:18], 'little'))
+    acc_d = fat_date(int.from_bytes(b[18:20], 'little'))
+    wr_d = fat_date(int.from_bytes(b[24:26], 'little'))
+    if crt_d is None and acc_d is None and wr_d is None:
+        return None
 
     base = bytes([first]) + b[1:8]
     ext = b[8:11]
@@ -127,7 +130,14 @@ def parse_slot(b: bytes, off: int) -> Slot | None:
 
 
 def merge_lfns(slots: list[Slot]) -> list[Slot]:
-    """Attach checksum-validated LFN runs to the short entry that follows."""
+    """Attach checksum-validated LFN runs to the short entry that follows.
+
+    Deleted entries have their first name byte replaced by 0xE5, breaking
+    direct checksum validation. The checksum then doubles as a recovery
+    tool: brute-force the 256 candidate first bytes and keep those that
+    reproduce the LFN checksum — validating the run AND restoring the
+    deleted name's first character.
+    """
     out: list[Slot] = []
     pending: list[Slot] = []
     for s in slots:
@@ -137,12 +147,21 @@ def merge_lfns(slots: list[Slot]) -> list[Slot]:
         if s.kind == 'entry':
             s.long_name = None
             if pending:
-                cs = lfn_checksum(s.raw[:11])
-                good = [p for p in pending
-                        if p.raw[13] == cs and p.deleted == s.deleted]
+                raw11 = s.raw[:11]
+                target = pending[0].raw[13]
+                if s.deleted:
+                    cand = [c for c in range(256)
+                            if lfn_checksum(bytes([c]) + raw11[1:11]) == target]
+                    ok = bool(cand)
+                else:
+                    cand = []
+                    ok = lfn_checksum(raw11) == target
+                good = [p for p in pending if ok and p.deleted == s.deleted]
                 if good:
                     good.sort(key=lambda p: p.raw[0] & 0x1F)
                     s.long_name = ''.join(p.name for p in good)
+                    if s.deleted and cand:
+                        s.long_name = chr(cand[0]) + s.long_name[1:]
             pending = []
         out.append(s)
     return out

@@ -97,7 +97,9 @@ def scan_fragments(f, gz: Geometry, slots: list[Slot], min_entries: int = 2):
     frags = []
     for clu, ss in sorted(by_cluster.items()):
         ss.sort(key=lambda s: s.off)
-        ss = merge_lfns(ss)
+        # adjacency test on RAW slots (merge_lfns consumes LFN rows, which
+        # would leave false gaps between the entries they annotate)
         if is_fragment(ss, min_entries):
-            frags.append(DirFragment(cluster=clu, off=gz.cluster_off(clu), slots=ss))
+            frags.append(DirFragment(cluster=clu, off=gz.cluster_off(clu),
+                                     slots=merge_lfns(ss)))
     return frags
