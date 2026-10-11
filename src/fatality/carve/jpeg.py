@@ -54,7 +54,7 @@ def find_previews(data: bytes) -> list[tuple[int, int]]:
         e = find_eoi(data[i:])
         out.append((i, (e + 2) if e else 0))
         pos = i + 3
-    return out[1:] if out else []       # first SOI is the parent itself
+    return out                # parent SOI is never in the list (scan starts at 2)
 
 
 def salvage_prefix(data: bytes) -> tuple[bytes, int]:
@@ -122,6 +122,9 @@ class JpegHandler(Handler):
                                  notes=['SOI in foreign data: no SOF marker before corruption'])
         res.extras['bytes'] = salvaged
         res.size = len(salvaged)
+        # a broken file still carries its embedded previews — attach them:
+        # for a truncated photo the preview is the best surviving view
+        res.extras['previews'] = find_previews(salvaged)
         res.damage.append((cut, max(0, len(data) - cut)))
         res.notes.append(f'no EOI: salvaged {len(salvaged)}B prefix at rel {cut}')
         res.out_path = 'jpeg'

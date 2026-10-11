@@ -67,3 +67,24 @@ def test_truncated_jpeg_salvages_prefix(tmp_path):
     assert res.status == 'partial'
     assert res.size > 1000
     assert res.notes
+
+
+def test_broken_jpeg_still_attaches_embedded_preview(tmp_path):
+    """Regression: a truncated photo must still carry its embedded preview
+    (the best surviving view), and the FIRST preview must not be dropped."""
+    h = JpegHandler()
+    thumb = b'\xff\xd8\xff\xdb\x00\x04\x00\x00\xff\xd9'
+    app1 = b'\xff\xe1' + (2 + len(thumb)).to_bytes(2, 'big') + thumb
+    jpg = make_jpeg()
+    parent = jpg[:2] + app1 + jpg[2:]
+    broken = parent[:len(parent) // 2]     # cut mid-entropy: no EOI survives
+    p = tmp_path / 'in.bin'
+    p.write_bytes(broken)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert res.status == 'partial'
+    previews = res.extras.get('previews') or []
+    assert previews, 'embedded preview missing from broken-file salvage'
+    poff, plen = previews[0]
+    assert poff == 6 and plen == len(thumb)   # after SOI(2) + APP1 hdr(4)
+    assert res.extras['bytes'][poff:poff + plen] == thumb

@@ -39,6 +39,27 @@ EXT_HANDLER = {'.jpg': 'jpeg', '.jpeg': 'jpeg', '.thm': 'jpeg',
                '.mp4': 'mp4', '.lrv': 'mp4', '.mov': 'mp4'}
 
 
+def _apply_datetime(path: Path, dt: str | None) -> None:
+    """Set the file's mtime from recovered metadata (EXIF / FAT entry).
+
+    Content-identical is not enough: a recovered photo that shows today's
+    date instead of the shooting date is visibly not the original file.
+    """
+    if not dt:
+        return
+    import datetime as _dt
+    import os
+    for fmt in ('%Y:%m:%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S',
+                '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            t = _dt.datetime.strptime(dt[:19], fmt)
+        except ValueError:
+            continue
+        ts = t.timestamp()
+        os.utime(path, (ts, ts))
+        return
+
+
 def _primary_geometry(f, size: int):
     """Best geometry: real BPB if any survives, else MBR-inferred; None =
     nothing to work with (caller exits cleanly rather than crashing)."""
@@ -129,6 +150,7 @@ def cmd_extract(args) -> int:
                         path = sub / _safe(s.display)
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(data)
+                        _apply_datetime(path, s.wr_date)
                         status = 'complete' if len(data) == s.size else 'partial'
                         validated = 'unvalidated'
                         hname = EXT_HANDLER.get(Path(s.display).suffix.lower())
@@ -177,6 +199,25 @@ def cmd_extract(args) -> int:
                 path = out / 'carved' / h.name / _safe(name)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(res.extras['bytes'])
+                _apply_datetime(path, res.datetime)
+                # attach embedded previews as linked companions — for a
+                # broken file the preview is the best surviving view
+                for pi, (poff, plen) in enumerate(res.extras.get('previews') or []):
+                    if plen <= 0:
+                        continue
+                    pv = res.extras['bytes'][poff:poff + plen]
+                    ppath = path.with_name(f'{path.stem}.PREVIEW{pi:02d}.jpg')
+                    ppath.write_bytes(pv)
+                    _apply_datetime(ppath, res.datetime)
+                    pv_res = h.validate(str(ppath))
+                    man.items.append(Item(
+                        path=str(ppath),
+                        status='complete' if pv_res.ok else 'partial',
+                        source='carve:jpeg:preview', offset=off + poff,
+                        size=len(pv), name=ppath.name,
+                        evidence=[f'embedded preview of {path.name}'],
+                        generation='carved',
+                        validated=f'{"ok" if pv_res.ok else "fail"}: {pv_res.detail}'))
                 v = h.validate(str(path))
                 status = res.status
                 if status == 'complete' and not v.ok:
