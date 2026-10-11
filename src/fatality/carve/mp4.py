@@ -93,6 +93,13 @@ def parse_moov(data: bytes, moov: Atom) -> dict[str, Any]:
             else:
                 sizes = list(struct.unpack(f'>{cnt}I', data[body + 12:body + 12 + 4 * cnt]))
             info['tracks'].append(dict(kind='stsz', sizes=sizes))
+        elif a.kind == b'stsc':
+            cnt = struct.unpack('>I', data[body + 4:body + 8])[0]
+            ent = []
+            for k in range(cnt):
+                o = body + 8 + 12 * k
+                ent.append(struct.unpack('>3I', data[o:o + 12]))
+            info['tracks'].append(dict(kind='stsc', entries=ent))
         elif a.kind == b'stco':
             cnt = struct.unpack('>I', data[body + 4:body + 8])[0]
             info['tracks'].append(dict(
@@ -132,6 +139,83 @@ def nal_walk_ok(sample: bytes) -> bool:
     return i == n
 
 
+def _recover_bounds(data: bytes) -> int | None:
+    """Header-tolerant file end when the ftyp size field is clobbered.
+
+    The mdat box (or a trailing moov) still gives the true end: one damaged
+    header byte must not zero out a whole media file.
+    """
+    m = data.find(b'mdat', 8)
+    if m < 8:
+        return None
+    size = struct.unpack('>I', data[m - 4:m])[0]
+    if 16 <= size <= (1 << 30) and m - 4 + size <= len(data):
+        return m - 4 + size
+    mv = data.find(b'moov', m)
+    while mv >= 0:
+        s = struct.unpack('>I', data[mv - 4:mv])[0]
+        if 16 <= s <= (1 << 30) and mv - 4 + s <= len(data):
+            return mv - 4 + s
+        mv = data.find(b'moov', mv + 1)
+    return None
+
+
+def sample_ranges(info: dict[str, Any]) -> list[tuple[int, int]]:
+    """(file offset, size) of every sample, per moov tables (stsc-expanded).
+
+    Tracks are paired by document order (k-th stsz with k-th stsc/stco),
+    which holds for real cameras where each trak lists them consecutively.
+    """
+    stszs = [t for t in info['tracks'] if t['kind'] == 'stsz']
+    stscs = [t for t in info['tracks'] if t['kind'] == 'stsc']
+    stos = [t for t in info['tracks'] if t['kind'] in ('stco', 'co64')]
+    out: list[tuple[int, int]] = []
+    for k in range(min(len(stszs), len(stos))):
+        sizes = stszs[k]['sizes']
+        offs = stos[k]['offsets']
+        entries = stscs[k]['entries'] if k < len(stscs) else [(1, 1, 1)]
+        si = 0
+        for e, (first, spc, _d) in enumerate(entries):
+            nxt = entries[e + 1][0] if e + 1 < len(entries) else len(offs) + 1
+            for ci in range(first - 1, min(nxt - 1, len(offs))):
+                coff = offs[ci]
+                for _ in range(spc):
+                    if si >= len(sizes):
+                        break
+                    out.append((coff, sizes[si]))
+                    coff += sizes[si]
+                    si += 1
+    return out
+
+
+def samples_intact(data: bytes, info: dict[str, Any]) -> tuple[bool, int, int]:
+    """Do the video track's samples NAL-walk inside the carved bytes?
+
+    ffprobe only reads headers — a fragmented contiguous span passes it.
+    The media bytes themselves must validate sample by sample before the
+    file may be called complete.  (Only the largest track: telemetry
+    samples are not NAL data.)
+    """
+    ranges = sample_ranges(info)
+    if not ranges:
+        return False, 0, 0
+    # pick the track with the most bytes: sample_ranges emits track by
+    # track in order, so slice out the best track's span
+    stszs = [t for t in info['tracks'] if t['kind'] == 'stsz']
+    best = max(range(len(stszs)), key=lambda k: sum(stszs[k]['sizes']))
+    per_track = sample_ranges(info)
+    start = sum(len(stszs[k]['sizes']) for k in range(best))
+    end = start + len(stszs[best]['sizes'])
+    ok = 0
+    chosen = per_track[start:end]
+    for _off, sz in chosen:
+        if _off < 0 or _off + sz > len(data):
+            continue
+        if nal_walk_ok(data[_off:_off + sz]):
+            ok += 1
+    return ok == len(chosen) and ok > 0, ok, len(chosen)
+
+
 class Mp4Handler(Handler):
     name = 'mp4'
     signature = b'ftyp'
@@ -152,11 +236,41 @@ class Mp4Handler(Handler):
             return ExtractResult(status='phantom', notes=['no ftyp at offset'])
         atoms = walk_atoms(data)
         if not atoms:
+            end = _recover_bounds(data)
+            if end:
+                res = ExtractResult(status='partial', size=end,
+                                    notes=['ftyp box clobbered: bounds recovered '
+                                           'from mdat/moov signatures (bytes verbatim)'])
+                res.extras['bytes'] = data[:end]
+                return res
             return ExtractResult(status='phantom', notes=['no atoms'])
         total = max(a.off + a.size for a in atoms)
+        if total > len(data):
+            # size fields walked past the readable window: truncation point
+            # unknown.  Metadata yes, bytes NO — never claim a complete file
+            # the structure cannot bound.
+            return ExtractResult(status='partial', size=len(data),
+                                 notes=[f'atom bounds exceed readable window '
+                                        f'({total} > {len(data)}): metadata only'],
+                                 extras={'atoms': [(a.off, a.size,
+                                                    a.kind.decode('latin-1'))
+                                                   for a in atoms][:64]})
+        # bound the span by REAL content: a junk size field on any atom can
+        # inflate `total` to the whole image while mdat/moov are sane
+        moovs = [a for a in atoms if a.kind == b'moov']
+        mdats = [a for a in atoms if a.kind == b'mdat']
+        content_end = max([*(a.off + a.size for a in moovs),
+                           *(a.off + a.size for a in mdats), 0])
+        if content_end and total > content_end + (1 << 20):
+            res_notes = [f'atom span {total} beyond content end {content_end}: '
+                         'junk size field, bound to content']
+            total = content_end
+        else:
+            res_notes = []
         res = ExtractResult(status='partial', size=total,
                             extras={'atoms': [(a.off, a.size, a.kind.decode('latin-1'))
                                               for a in atoms if True][:64]})
+        res.notes.extend(res_notes)
         moovs = [a for a in atoms if a.kind == b'moov']
         mdats = [a for a in atoms if a.kind == b'mdat']
         if moovs:
@@ -171,8 +285,25 @@ class Mp4Handler(Handler):
             res.extras['gp_descriptors'] = len(descs)
             res.notes.append(f'{len(descs)} GoPro sample descriptors in mdat')
         if moovs and mdats and not res.damage:
-            res.status = 'complete'
-            res.extras['bytes'] = data[:total]
+            intact, ok, cnt = samples_intact(data, info if moovs else {})
+            # cross-validate container bounds against the file's own sample
+            # tables: a damaged mdat size field can inflate the span to the
+            # whole image and must never claim bytes (or suppress salvage)
+            declared = mdats[0].size
+            tables = sum(sz for _, sz in sample_ranges(info))
+            consistent = abs(declared - tables) <= max(1 << 20, tables // 10)
+            if not consistent:
+                res.notes.append(f'mdat size {declared} inconsistent with '
+                                 f'sample tables {tables}: bounds unknown, '
+                                 'metadata only')
+            elif intact:
+                res.status = 'complete'
+                res.extras['bytes'] = data[:total]
+                res.notes.append(f'{ok}/{cnt} video samples NAL-validated')
+            else:
+                res.notes.append(f'sample bytes do not validate ({ok}/{cnt}): '
+                                 'fragmented span, media salvage instead')
+                res.extras['bytes'] = data[:total]
         else:
             res.notes.append('moov/mdat incomplete or unverified: metadata only')
         return res

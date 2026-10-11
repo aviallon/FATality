@@ -301,6 +301,40 @@ def prefix_match(a: bytes, b: bytes) -> int:
     return i
 
 
+def overlap_match(fragment: bytes, truth: bytes) -> int:
+    """Bytes of `fragment` occurring verbatim at ONE position inside truth
+    (a salvaged NAL run starts mid-file; prefix-match cannot see it)."""
+    if len(fragment) < 64:
+        return 0
+    pos = truth.find(fragment[:256])
+    if pos < 0:
+        return 0
+    n = 0
+    while pos + n < len(truth) and n < len(fragment) and truth[pos + n] == fragment[n]:
+        n += 1
+    return n
+
+
+def attr_bytes(rec: bytes, tb: bytes) -> int:
+    return max(prefix_match(rec, tb), aligned_count(rec, tb))
+
+
+def aligned_count(rec: bytes, tb: bytes) -> int:
+    """Total bytes correct at their TRUE position (anchored by first 256B).
+
+    The honest salvage metric: a file 99% correct with damage holes has far
+    more real bytes than its longest matching prefix suggests.  Never counts
+    across misalignment — the anchor must match first.
+    """
+    if len(rec) < 64:
+        return 0
+    pos = tb.find(rec[:256])
+    if pos < 0:
+        return 0
+    seg = tb[pos:pos + len(rec)]
+    return sum(1 for a, b in zip(seg, rec, strict=False) if a == b)
+
+
 def score_extraction(manifest: list[Truth], extracted: Path,
                      named_index: dict[str, Path],
                      truth_bytes: dict[str, bytes] | None = None) -> RunResult:
@@ -352,10 +386,16 @@ def score_extraction(manifest: list[Truth], extracted: Path,
                 cands += [p for p, sz, hd in rec_files
                           if p not in cands and len(hd) >= 64
                           and hd == head[:len(hd)] and 0 < sz <= 4 * t.size]
+            if tb is not None:
+                # mid-file fragment channel: a salvaged NAL run starts INSIDE
+                # the file — attribute by in-file overlap, not by head match
+                cands += [p for p, sz, hd in rec_files
+                          if p not in cands and len(hd) >= 64
+                          and tb.find(hd[:256]) >= 0 and sz >= 1024]
             if cands:
                 matched_files.update(cands)
                 if tb is not None:
-                    got, best = max(((prefix_match(p.read_bytes(), tb), p)
+                    got, best = max(((attr_bytes(p.read_bytes(), tb), p)
                                      for p in cands), key=lambda x: x[0])
                 else:
                     best = max(cands, key=lambda p: p.stat().st_size)
@@ -363,7 +403,8 @@ def score_extraction(manifest: list[Truth], extracted: Path,
                 if 0 < got < t.size:
                     s.cls = 'partial'
                     s.bytes_recovered = got
-                    s.evidence = f'best match {got}/{t.size} bytes: {best}'
+                    s.evidence = (f'best match {got}/{t.size} bytes '
+                                  f'(position-correct): {best}')
                 elif got >= t.size:
                     s.cls = 'partial'
                     s.bytes_recovered = t.size
@@ -484,7 +525,13 @@ def cmd_manifest(args) -> int:
 def cmd_run(args) -> int:
     sc, img = Path(args.scenario), Path(args.image)
     out = Path(args.out or (sc / 'last-run'))
-    out.mkdir(parents=True, exist_ok=True)
+    # ALWAYS a fresh extraction directory: stale outputs from earlier runs
+    # silently match hashes/names and inflate scores (a blessed baseline was
+    # once scored against files that predate the image being tested).
+    import shutil
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
     if img.suffix == '.gz':
         import gzip
         raw = out / 'image.raw'

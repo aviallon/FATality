@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 
 from . import carve
+from .carve.h264_media import MediaRun, media_runs
+from .carve.h264_media import annexb as nal_annexb
 from .fat import load_fats, reconstruct
 from .geometry import scan_geometries
 from .report import Item, Manifest
@@ -151,11 +153,16 @@ def cmd_extract(args) -> int:
 
         # ---- 2) handler carving on signature hits (decode-gated) ----
         hits = scan_signatures(f, g.data_off, end, SIGS)
+        covered: list[tuple[int, int]] = []
         for h in carve.handlers():
             key = {'jpeg': 'jpeg', 'mp4': 'mp4_ftyp'}.get(h.name)
             if key is None:
                 continue
-            for off in hits.get(key, [])[:args.max_carve]:
+            for hit in hits.get(key, [])[:args.max_carve]:
+                # signature hits point at the magic itself; mp4's magic
+                # ('ftyp') sits 4 bytes INTO the box — handlers get the box
+                # start (this off-by-four made every mp4 carve phantom)
+                off = hit - 4 if key == 'mp4_ftyp' else hit
                 res = h.extract(f, off)
                 if res.status == 'phantom':
                     counts['phantom'] += 1
@@ -183,6 +190,64 @@ def cmd_extract(args) -> int:
                                       evidence=res.notes, damage=res.damage,
                                       generation='carved',
                                       validated=f'{"ok" if v.ok else "fail"}: {v.detail}'))
+                if h.name == 'mp4' and res.extras.get('bytes') and status == 'complete':
+                    # only a decode-complete MP4 suppresses media salvage;
+                    # a fragmented contiguous-span must not hide good NAL runs
+                    covered.append((off, off + len(res.extras['bytes'])))
+
+        # ---- 3) container-independent H.264 media salvage ----
+        # No ftyp/moov needed: validated NAL runs are frames without time.
+        # Runs already inside a decode-complete MP4 are skipped (no double
+        # output); window-duplicates and overlapping runs are merged away.
+        win, overlap = 64 << 20, 16 << 20
+        found: dict[tuple[int, int], tuple[int, int]] = {}   # (off, end) -> (nals, vcl)
+        pos = g.data_off
+        while pos < end:
+            f.seek(pos)
+            blob = f.read(win + overlap)
+            if not blob:
+                break
+            for run in media_runs(blob):
+                abs_off, abs_end = pos + run.off, pos + run.end
+                if any(a <= abs_off < b for a, b in covered):
+                    continue
+                found.setdefault((abs_off, abs_end), (run.nals, run.vcl))
+            pos += win
+        # drop runs overlapping an earlier one (window duplicates of a
+        # run that straddles a window boundary start at the same offset;
+        # partial overlaps are resolved in favour of the earlier run)
+        kept: list[tuple[int, int, int, int]] = []
+        prev_end = -1
+        for (a, b), (nals, vcl) in sorted(found.items()):
+            if a < prev_end:
+                continue
+            kept.append((a, b, nals, vcl))
+            prev_end = b
+        kept.sort(key=lambda r: r[1] - r[0], reverse=True)
+        omitted = max(0, len(kept) - args.max_carve)
+        for a, b, nals, vcl in kept[:args.max_carve]:
+            f.seek(a)
+            chunk = f.read(b - a)
+            frames = nal_annexb(chunk, MediaRun(0, len(chunk), nals, vcl))
+            name = f'h264_run_{a:013d}.h264'
+            path = out / 'carved' / 'h264' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(frames)
+            man.items.append(Item(path=str(path), status='partial',
+                                  source='media:h264', offset=a,
+                                  size=b - a,
+                                  evidence=[f'NAL run: {nals} NALs, '
+                                            f'{vcl} video-coded, '
+                                            f'{b - a} bytes, no container'
+                                            ' (frames without time)'],
+                                  generation='carved',
+                                  validated='unvalidated'))
+        if omitted:
+            man.items.append(Item(path='', status='metadata-only',
+                                  source='media:h264', size=0,
+                                  evidence=[f'{omitted} smaller NAL runs '
+                                            'not written (cap '
+                                            f'{args.max_carve})']))
 
         # ---- 3) GoPro media-counter inference -> named ghosts ----
         from .carve.gopro import counter_inference

@@ -1,30 +1,30 @@
 {
- "blessed": "windows-made fixture (composite-healed); bytes = prefix-match metric",
- "metric": "bytes_recovered = leading-identical-bytes vs ground truth (stricter than the old size proxy)",
+ "blessed": "windows-made fixture: re-blessed under position-correct metric with full MP4 salvage build",
+ "metric": "bytes_recovered = total bytes correct at true position (anchor: first-256B)",
  "counts": {
-  "lost": 6,
-  "intact": 9,
-  "partial": 2,
+  "partial": 5,
+  "intact": 11,
+  "lost": 1,
   "name-only": 1
  },
  "false_positives": 4,
  "scores": [
   {
    "path": "groundtruth/Alarms/alarm.mp3",
-   "cls": "lost",
-   "bytes_recovered": 0,
+   "cls": "partial",
+   "bytes_recovered": 1028,
    "size": 1028
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/G0013656.JPG",
-   "cls": "lost",
-   "bytes_recovered": 0,
+   "cls": "partial",
+   "bytes_recovered": 9598,
    "size": 2089359
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/G0013657.JPG",
-   "cls": "lost",
-   "bytes_recovered": 0,
+   "cls": "partial",
+   "bytes_recovered": 9787,
    "size": 2090048
   },
   {
@@ -59,14 +59,14 @@
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.LRV.MP4",
-   "cls": "lost",
-   "bytes_recovered": 0,
+   "cls": "intact",
+   "bytes_recovered": 2794599,
    "size": 2794599
   },
   {
    "path": "groundtruth/DCIM/100GOPRO/GOPR3655.MP4",
-   "cls": "lost",
-   "bytes_recovered": 0,
+   "cls": "intact",
+   "bytes_recovered": 7491436,
    "size": 7491436
   },
   {
