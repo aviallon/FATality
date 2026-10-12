@@ -19,6 +19,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import carve
 from .carve.h264_media import MediaRun, media_runs
@@ -71,39 +72,99 @@ def _primary_geometry(f, size: int):
     return geometry_from_mbr_only(f, size)
 
 
+class _Progress:
+    """Tiny progress bar: rich (the pip look) when available, else plain.
+
+    Recovery runs take tens of minutes with zero output otherwise — the
+    bar is UX only and must never influence the work being counted.
+    """
+
+    def __init__(self, label: str, total: int | None = None):
+        self.label, self.total = label, total
+        self.n = 0
+        self._rich = None
+        self._task: Any = None
+        try:
+            from rich.progress import (
+                BarColumn,
+                MofNCompleteColumn,
+                Progress,
+                SpinnerColumn,
+                TextColumn,
+                TimeElapsedColumn,
+            )
+            cols = [SpinnerColumn(), TextColumn('[bold]{task.description}'),
+                    BarColumn()]
+            cols += [MofNCompleteColumn() if total
+                     else TextColumn('{task.completed}')]
+            cols += [TimeElapsedColumn()]
+            self._rich = Progress(*cols)
+        except ImportError:
+            self._rich = None
+
+    def __enter__(self):
+        if self._rich:
+            self._rich.__enter__()
+            self._task = self._rich.add_task(self.label, total=self.total)
+        else:
+            print(f'{self.label}...')
+        return self
+
+    def __exit__(self, *exc):
+        if self._rich:
+            self._rich.__exit__(*exc)
+        else:
+            tail = f'/{self.total}' if self.total is not None else ''
+            print(f'{self.label}: {self.n}{tail}')
+        return False
+
+    def step(self, n: int = 1, label: str | None = None):
+        self.n += n
+        if self._rich is not None and self._task is not None:
+            kw: dict = {'advance': n}
+            if label:
+                kw['description'] = f'{self.label} — {label}'
+            self._rich.update(self._task, **kw)
+
+
 def cmd_scan(args) -> int:
     img = Path(args.image)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     size = img.stat().st_size
     with open(img, 'rb') as f:
-        g = _primary_geometry(f, size)
-        if g is None:
-            print('no usable geometry: MBR and all boot sectors unreadable',
-                  file=sys.stderr)
-            return 2
-        report = dict(image=str(img), size=size, geometries=[g.summary()])
-        print(f'primary: {g.summary()}')
+        with _Progress('scan', 4) as bar:
+            g = _primary_geometry(f, size)
+            bar.step()
+            if g is None:
+                print('no usable geometry: MBR and all boot sectors unreadable',
+                      file=sys.stderr)
+                return 2
+            report = dict(image=str(img), size=size, geometries=[g.summary()])
+            print(f'primary: {g.summary()}')
 
-        fats = load_fats(f, g)
-        from .fat import merge_fats
-        consensus = merge_fats(fats)
-        print(f'FAT copies: {len(fats)}, live chain entries (consensus): {len(consensus)}')
-        report['fat_entries'] = len(consensus)
+            fats = load_fats(f, g)
+            from .fat import merge_fats
+            consensus = merge_fats(fats)
+            bar.step()
+            print(f'FAT copies: {len(fats)}, live chain entries (consensus): {len(consensus)}')
+            report['fat_entries'] = len(consensus)
 
-        end = g.part_off + (g.part_size or (size - g.part_off))
-        slots = scan_slots(f, g.data_off, end)
-        frags = scan_fragments(f, g, slots)
-        print(f'directory slots (plausible): {len(slots)}')
-        print(f'directory fragments: {len(frags)}')
-        report['slots'] = len(slots)
-        report['fragments'] = [dict(cluster=fr.cluster, entries=len(fr.entries),
-                                    names=fr.names[:20]) for fr in frags]
+            end = g.part_off + (g.part_size or (size - g.part_off))
+            slots = scan_slots(f, g.data_off, end)
+            frags = scan_fragments(f, g, slots)
+            bar.step()
+            print(f'directory slots (plausible): {len(slots)}')
+            print(f'directory fragments: {len(frags)}')
+            report['slots'] = len(slots)
+            report['fragments'] = [dict(cluster=fr.cluster, entries=len(fr.entries),
+                                        names=fr.names[:20]) for fr in frags]
 
-        hits = scan_signatures(f, g.data_off, end, SIGS)
-        report['signatures'] = {k: len(v) for k, v in hits.items()}
-        print(f'signatures: {report["signatures"]}')
-        (out / 'scan.json').write_text(json.dumps(report, indent=1))
+            hits = scan_signatures(f, g.data_off, end, SIGS)
+            bar.step()
+            report['signatures'] = {k: len(v) for k, v in hits.items()}
+            print(f'signatures: {report["signatures"]}')
+            (out / 'scan.json').write_text(json.dumps(report, indent=1))
         print(f'written {out / "scan.json"}')
     return 0
 
@@ -311,38 +372,41 @@ def cmd_extract(args) -> int:
         hits = scan_signatures(f, g.data_off, end, SIGS)
         covered: list[tuple[int, int]] = []
         pending = []
-        for h in carve.handlers():
-            key = {'jpeg': 'jpeg', 'mp4': 'mp4_ftyp'}.get(h.name)
-            if key is None:
-                continue
-            for hit in hits.get(key, [])[:args.max_carve]:
-                # signature hits point at the magic itself; mp4's magic
-                # ('ftyp') sits 4 bytes INTO the box — handlers get the box
-                # start (this off-by-four made every mp4 carve phantom)
-                off = hit - 4 if key == 'mp4_ftyp' else hit
-                res = h.extract(f, off)
-                if res.status == 'phantom':
-                    counts['phantom'] += 1
+        n_todo = sum(min(len(v), args.max_carve) for v in hits.values())
+        with _Progress('carving', n_todo) as bar:
+            for h in carve.handlers():
+                key = {'jpeg': 'jpeg', 'mp4': 'mp4_ftyp'}.get(h.name)
+                if key is None:
                     continue
-                if res.status not in ('complete', 'partial') or 'bytes' not in res.extras:
-                    if res.name:
-                        man.ghosts.append(dict(name=res.name, kind=h.name,
-                                               datetime=res.datetime,
-                                               survived='identity only'))
-                    if h.name == 'mp4' and res.status != 'phantom':
-                        # no carveable bytes, but a real ftyp anchor: the
-                        # reassembly engine maps fragments on its own — this
-                        # is how videos without a surviving dir entry get
-                        # attempted at all
-                        mp4_targets.append((off, res.name or f'mp4_off{off:013d}',
-                                            res.datetime))
-                    continue
-                name = (res.name or
-                        f'{h.name}_off{off:013d}'
-                        + {'jpeg': '.jpg', 'mp4': '.mp4'}.get(h.name, ''))
-                pending.append((off, h, res, name))
-                if h.name == 'mp4':
-                    mp4_targets.append((off, name, res.datetime))
+                for hit in hits.get(key, [])[:args.max_carve]:
+                    bar.step()
+                    # signature hits point at the magic itself; mp4's magic
+                    # ('ftyp') sits 4 bytes INTO the box — handlers get the box
+                    # start (this off-by-four made every mp4 carve phantom)
+                    off = hit - 4 if key == 'mp4_ftyp' else hit
+                    res = h.extract(f, off)
+                    if res.status == 'phantom':
+                        counts['phantom'] += 1
+                        continue
+                    if res.status not in ('complete', 'partial') or 'bytes' not in res.extras:
+                        if res.name:
+                            man.ghosts.append(dict(name=res.name, kind=h.name,
+                                                   datetime=res.datetime,
+                                                   survived='identity only'))
+                        if h.name == 'mp4' and res.status != 'phantom':
+                            # no carveable bytes, but a real ftyp anchor: the
+                            # reassembly engine maps fragments on its own — this
+                            # is how videos without a surviving dir entry get
+                            # attempted at all
+                            mp4_targets.append((off, res.name or f'mp4_off{off:013d}',
+                                                res.datetime))
+                        continue
+                    name = (res.name or
+                            f'{h.name}_off{off:013d}'
+                            + {'jpeg': '.jpg', 'mp4': '.mp4'}.get(h.name, ''))
+                    pending.append((off, h, res, name))
+                    if h.name == 'mp4':
+                        mp4_targets.append((off, name, res.datetime))
 
         # write BIG first: a carve whose bytes live inside a complete file
         # is redundant — recorded as 'subsumed', never written (this was the
@@ -444,71 +508,73 @@ def cmd_extract(args) -> int:
         done_stems: set[str] = set()
         seen_offs: set[int] = set()
         reassembly_records: list[tuple] = []
-        for off, name, dt in mp4_targets:
-            # strip ONLY a real .mp4 extension: Path('x.LRV').stem would eat
-            # '.LRV' and mislabel a low-res reassembly as the full-res video
-            stem = name[:-4] if name.upper().endswith('.MP4') else name
-            if stem in done_stems or off in seen_offs:
-                continue
-            done_stems.add(stem)
-            seen_offs.add(off)
-            out_mp4 = out / 'carved' / 'mp4' / f'{stem}.reassembled.mp4'
-            out_mp4.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                r = carve.by_name('mp4').reassemble(f, g, off, out_mp4,
-                                                    verify=True)
-            except Exception as e:                       # noqa: BLE001
-                man.items.append(Item(path='', status='failed',
-                                      source='reassemble:mp4', offset=off,
-                                      name=name,
-                                      evidence=[f'reassembly raised {e}: '
-                                                'intermediates kept']))
-                continue
-            # engine scratch (scan cache etc.): intermediate, removed by default
-            if r.work_dir and not args.keep_intermediates:
-                import shutil
-                shutil.rmtree(r.work_dir, ignore_errors=True)
-            st = r.sample_stats
-            ok = r.status == 'complete' and st.all_ok
-            if out_mp4.exists():
-                _apply_datetime(out_mp4, dt)
-            rec_item = Item(path=str(out_mp4) if out_mp4.exists() else '',
-                            status='complete' if ok else r.status,
-                            source='reassemble:mp4', offset=off,
-                            size=r.bytes_written, name=out_mp4.name,
-                            datetime=dt,
-                            evidence=[f'samples: nal_ok={st.nal_ok} '
-                                      f'nal_bad={st.nal_bad} '
-                                      f'desc_ok={st.descriptors_ok} '
-                                      f'gpmd_ok={st.gpmd_ok}',
-                                      f'mapped={r.mapped_bytes}/'
-                                      f'{r.file_size}',
-                                      *r.notes],
-                            generation='carved',
-                            validated=('ok' if st.all_ok else 'fail'))
-            man.items.append(rec_item)
-            reassembly_records.append(
-                (rec_item, out_mp4, off,
-                 (r.moov.creation_iso if r.moov else None) or dt,
-                 r.bytes_written, name, r.runs))
-            if ok:
-                covered.append((off, off + r.bytes_written))
-                if not args.keep_intermediates:
-                    for it in man.items:
-                        nm = (it.name or '').upper()
-                        if (it.path and it.name
-                                and nm.endswith(('.MP4', '.LRV'))
-                                and (it.name[:-4] if it.name.upper().endswith('.MP4')
-                                     else it.name) == stem
-                                and it.source in ('carve:mp4', 'dir-entry')):
-                            old = Path(it.path)
-                            if old.exists() and old != out_mp4:
-                                old.unlink()
-                            it.path = ''
-                            it.status = 'superseded'
-                            it.evidence = list(it.evidence or []) + [
-                                f'intermediate removed: superseded by '
-                                f'{out_mp4.name}']
+        with _Progress('reassembling', len(mp4_targets)) as bar:
+            for off, name, dt in mp4_targets:
+                bar.step(1, name)
+                # strip ONLY a real .mp4 extension: Path('x.LRV').stem would eat
+                # '.LRV' and mislabel a low-res reassembly as the full-res video
+                stem = name[:-4] if name.upper().endswith('.MP4') else name
+                if stem in done_stems or off in seen_offs:
+                    continue
+                done_stems.add(stem)
+                seen_offs.add(off)
+                out_mp4 = out / 'carved' / 'mp4' / f'{stem}.reassembled.mp4'
+                out_mp4.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    r = carve.by_name('mp4').reassemble(f, g, off, out_mp4,
+                                                        verify=True)
+                except Exception as e:                       # noqa: BLE001
+                    man.items.append(Item(path='', status='failed',
+                                          source='reassemble:mp4', offset=off,
+                                          name=name,
+                                          evidence=[f'reassembly raised {e}: '
+                                                    'intermediates kept']))
+                    continue
+                # engine scratch (scan cache etc.): intermediate, removed by default
+                if r.work_dir and not args.keep_intermediates:
+                    import shutil
+                    shutil.rmtree(r.work_dir, ignore_errors=True)
+                st = r.sample_stats
+                ok = r.status == 'complete' and st.all_ok
+                if out_mp4.exists():
+                    _apply_datetime(out_mp4, dt)
+                rec_item = Item(path=str(out_mp4) if out_mp4.exists() else '',
+                                status='complete' if ok else r.status,
+                                source='reassemble:mp4', offset=off,
+                                size=r.bytes_written, name=out_mp4.name,
+                                datetime=dt,
+                                evidence=[f'samples: nal_ok={st.nal_ok} '
+                                          f'nal_bad={st.nal_bad} '
+                                          f'desc_ok={st.descriptors_ok} '
+                                          f'gpmd_ok={st.gpmd_ok}',
+                                          f'mapped={r.mapped_bytes}/'
+                                          f'{r.file_size}',
+                                          *r.notes],
+                                generation='carved',
+                                validated=('ok' if st.all_ok else 'fail'))
+                man.items.append(rec_item)
+                reassembly_records.append(
+                    (rec_item, out_mp4, off,
+                     (r.moov.creation_iso if r.moov else None) or dt,
+                     r.bytes_written, name, r.runs))
+                if ok:
+                    covered.append((off, off + r.bytes_written))
+                    if not args.keep_intermediates:
+                        for it in man.items:
+                            nm = (it.name or '').upper()
+                            if (it.path and it.name
+                                    and nm.endswith(('.MP4', '.LRV'))
+                                    and (it.name[:-4] if it.name.upper().endswith('.MP4')
+                                         else it.name) == stem
+                                    and it.source in ('carve:mp4', 'dir-entry')):
+                                old = Path(it.path)
+                                if old.exists() and old != out_mp4:
+                                    old.unlink()
+                                it.path = ''
+                                it.status = 'superseded'
+                                it.evidence = list(it.evidence or []) + [
+                                    f'intermediate removed: superseded by '
+                                    f'{out_mp4.name}']
 
         # ---- 3b) name the reassemblies (GoPro media-counter inference) ----
         members = [dict(off=r_off,
@@ -549,128 +615,136 @@ def cmd_extract(args) -> int:
                         break
             return hits.pop() if len(hits) == 1 else None
 
-        for it in man.items:
-            if (it.source == 'carve:jpeg' and it.path and it.offset
-                    and '/previews/' in it.path):
-                parent = _extent_parent(it.offset)
-                note = ''
-                if parent:
-                    note = f'preview of {parent} (physical extent match)'
-                else:
-                    # content-based link: the preview is a re-encode of its
-                    # photo — measured 29-36 dB same content vs 10-12 dB
-                    # unrelated (bimodal; a margin rule blocks near-ties).
-                    # Candidates are the PHOTOS only: a preview would match
-                    # ITSELF at 99 dB and its siblings at 30+ dB.
-                    blob = Path(it.path).read_bytes()
-                    scored = sorted(
-                        ((_psnr(blob, b), nm) for nm, b in complete_blobs
-                         if nm.upper().endswith(('.JPG', '.JPEG'))
-                         and 'PREVIEW' not in nm.upper()
-                         and 'THM' not in nm.upper()
-                         and nm != it.name),
-                        reverse=True)
-                    if (len(scored) >= 2 and scored[0][0] >= 25.0
-                            and scored[0][0] - scored[1][0] >= 3.0):
-                        parent = scored[0][1].rsplit('.', 1)[0]
-                        note = (f'content match: PSNR {scored[0][0]:.1f} dB '
-                                f'vs {scored[0][1]} '
-                                f'(2nd best {scored[1][0]:.1f} dB)')
-                if parent and '.PREVIEW960.' not in (it.name or ''):
-                    new = Path(it.path).with_name(
-                        _safe(f'{parent}.PREVIEW960.jpg'))
-                    Path(it.path).rename(new)
-                    it.path = str(new)
-                    it.name = new.name
-                    it.evidence = list(it.evidence or []) + [note]
-                else:
-                    # no extent, no content match: keep identity, record the
-                    # placement hint (GoPro writes each preview just BEFORE
-                    # its video's ftyp anchor) as manifest evidence only —
-                    # a guessed name is worse than an anonymous one
-                    near = min(reassembly_records,
-                               key=lambda r: abs(r[2] - it.offset)
-                               if r[2] >= it.offset else 1 << 62,
-                               default=None)
-                    if near and near[2] - it.offset < (256 << 10):
-                        hint = near[0].name or near[1].name
-                        it.evidence = list(it.evidence or []) + [
-                            f'preview-class artefact {near[2] - it.offset}B '
-                            f'before {hint} ftyp anchor (camera placement '
-                            'pattern: likely its preview)']
+        pv_items = [i for i in man.items
+                    if i.source == 'carve:jpeg' and i.path and i.offset
+                    and '/previews/' in i.path]
+        with _Progress('linking previews', len(pv_items)) as bar:
+            for it in pv_items:
+                bar.step()
+                if (it.source == 'carve:jpeg' and it.path and it.offset
+                        and '/previews/' in it.path):
+                    parent = _extent_parent(it.offset)
+                    note = ''
+                    if parent:
+                        note = f'preview of {parent} (physical extent match)'
+                    else:
+                        # content-based link: the preview is a re-encode of its
+                        # photo — measured 29-36 dB same content vs 10-12 dB
+                        # unrelated (bimodal; a margin rule blocks near-ties).
+                        # Candidates are the PHOTOS only: a preview would match
+                        # ITSELF at 99 dB and its siblings at 30+ dB.
+                        blob = Path(it.path).read_bytes()
+                        scored = sorted(
+                            ((_psnr(blob, b), nm) for nm, b in complete_blobs
+                             if nm.upper().endswith(('.JPG', '.JPEG'))
+                             and 'PREVIEW' not in nm.upper()
+                             and 'THM' not in nm.upper()
+                             and nm != it.name),
+                            reverse=True)
+                        if (len(scored) >= 2 and scored[0][0] >= 25.0
+                                and scored[0][0] - scored[1][0] >= 3.0):
+                            parent = scored[0][1].rsplit('.', 1)[0]
+                            note = (f'content match: PSNR {scored[0][0]:.1f} dB '
+                                    f'vs {scored[0][1]} '
+                                    f'(2nd best {scored[1][0]:.1f} dB)')
+                    if parent and '.PREVIEW960.' not in (it.name or ''):
+                        new = Path(it.path).with_name(
+                            _safe(f'{parent}.PREVIEW960.jpg'))
+                        Path(it.path).rename(new)
+                        it.path = str(new)
+                        it.name = new.name
+                        it.evidence = list(it.evidence or []) + [note]
+                    else:
+                        # no extent, no content match: keep identity, record the
+                        # placement hint (GoPro writes each preview just BEFORE
+                        # its video's ftyp anchor) as manifest evidence only —
+                        # a guessed name is worse than an anonymous one
+                        near = min(reassembly_records,
+                                   key=lambda r: abs(r[2] - it.offset)
+                                   if r[2] >= it.offset else 1 << 62,
+                                   default=None)
+                        if near and near[2] - it.offset < (256 << 10):
+                            hint = near[0].name or near[1].name
+                            it.evidence = list(it.evidence or []) + [
+                                f'preview-class artefact {near[2] - it.offset}B '
+                                f'before {hint} ftyp anchor (camera placement '
+                                'pattern: likely its preview)']
 
-        # ---- 4) container-independent H.264 media salvage ----
-        # No ftyp/moov needed: validated NAL runs are frames without time.
-        # Runs already inside a decode-complete MP4 are skipped (no double
-        # output); window-duplicates and overlapping runs are merged away.
-        win, overlap = 64 << 20, 16 << 20
-        found: dict[tuple[int, int], tuple[int, int]] = {}   # (off, end) -> (nals, vcl)
-        pos = g.data_off
-        while pos < end:
-            f.seek(pos)
-            blob = f.read(win + overlap)
-            if not blob:
-                break
-            for run in media_runs(blob):
-                abs_off, abs_end = pos + run.off, pos + run.end
-                if any(a <= abs_off < b for a, b in covered):
+            # ---- 4) container-independent H.264 media salvage ----
+            # No ftyp/moov needed: validated NAL runs are frames without time.
+            # Runs already inside a decode-complete MP4 are skipped (no double
+            # output); window-duplicates and overlapping runs are merged away.
+            win, overlap = 64 << 20, 16 << 20
+            found: dict[tuple[int, int], tuple[int, int]] = {}   # (off, end) -> (nals, vcl)
+            n_wins = max(1, (end - g.data_off + win - 1) // win)
+            with _Progress('media salvage', n_wins) as bar:
+                pos = g.data_off
+                while pos < end:
+                    bar.step()
+                    f.seek(pos)
+                    blob = f.read(win + overlap)
+                    if not blob:
+                        break
+                    for run in media_runs(blob):
+                        abs_off, abs_end = pos + run.off, pos + run.end
+                        if any(a <= abs_off < b for a, b in covered):
+                            continue
+                        found.setdefault((abs_off, abs_end), (run.nals, run.vcl))
+                    pos += win
+            # drop runs overlapping an earlier one (window duplicates of a
+            # run that straddles a window boundary start at the same offset;
+            # partial overlaps are resolved in favour of the earlier run)
+            kept: list[tuple[int, int, int, int]] = []
+            prev_end = -1
+            for (a, b), (nals, vcl) in sorted(found.items()):
+                if a < prev_end:
                     continue
-                found.setdefault((abs_off, abs_end), (run.nals, run.vcl))
-            pos += win
-        # drop runs overlapping an earlier one (window duplicates of a
-        # run that straddles a window boundary start at the same offset;
-        # partial overlaps are resolved in favour of the earlier run)
-        kept: list[tuple[int, int, int, int]] = []
-        prev_end = -1
-        for (a, b), (nals, vcl) in sorted(found.items()):
-            if a < prev_end:
-                continue
-            kept.append((a, b, nals, vcl))
-            prev_end = b
-        kept.sort(key=lambda r: r[1] - r[0], reverse=True)
-        omitted = max(0, len(kept) - args.max_carve)
-        for a, b, nals, vcl in kept[:args.max_carve]:
-            f.seek(a)
-            chunk = f.read(b - a)
-            frames = nal_annexb(chunk, MediaRun(0, len(chunk), nals, vcl))
-            # never write empty/negligible runs, and never duplicates of
-            # what a complete file already contains
-            if len(frames) < 1024:
-                continue
-            if any(frames in blob for _, blob in complete_blobs):
-                continue
-            if _dedup(frames, out / 'carved' / 'h264' / f'h264_run_{a:013d}.h264'):
-                continue
-            name = f'h264_run_{a:013d}.h264'
-            path = out / 'carved' / 'h264' / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(frames)
-            man.items.append(Item(path=str(path), status='partial',
-                                  source='media:h264', offset=a,
-                                  size=b - a,
-                                  evidence=[f'NAL run: {nals} NALs, '
-                                            f'{vcl} video-coded, '
-                                            f'{b - a} bytes, no container'
-                                            ' (frames without time)'],
-                                  generation='carved',
-                                  validated='unvalidated'))
-        if omitted:
-            man.items.append(Item(path='', status='metadata-only',
-                                  source='media:h264', size=0,
-                                  evidence=[f'{omitted} smaller NAL runs '
-                                            'not written (cap '
-                                            f'{args.max_carve})']))
+                kept.append((a, b, nals, vcl))
+                prev_end = b
+            kept.sort(key=lambda r: r[1] - r[0], reverse=True)
+            omitted = max(0, len(kept) - args.max_carve)
+            for a, b, nals, vcl in kept[:args.max_carve]:
+                f.seek(a)
+                chunk = f.read(b - a)
+                frames = nal_annexb(chunk, MediaRun(0, len(chunk), nals, vcl))
+                # never write empty/negligible runs, and never duplicates of
+                # what a complete file already contains
+                if len(frames) < 1024:
+                    continue
+                if any(frames in blob for _, blob in complete_blobs):
+                    continue
+                if _dedup(frames, out / 'carved' / 'h264' / f'h264_run_{a:013d}.h264'):
+                    continue
+                name = f'h264_run_{a:013d}.h264'
+                path = out / 'carved' / 'h264' / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(frames)
+                man.items.append(Item(path=str(path), status='partial',
+                                      source='media:h264', offset=a,
+                                      size=b - a,
+                                      evidence=[f'NAL run: {nals} NALs, '
+                                                f'{vcl} video-coded, '
+                                                f'{b - a} bytes, no container'
+                                                ' (frames without time)'],
+                                      generation='carved',
+                                      validated='unvalidated'))
+            if omitted:
+                man.items.append(Item(path='', status='metadata-only',
+                                      source='media:h264', size=0,
+                                      evidence=[f'{omitted} smaller NAL runs '
+                                                'not written (cap '
+                                                f'{args.max_carve})']))
 
-        # ---- 3) GoPro media-counter inference -> named ghosts ----
-        from .carve.gopro import counter_inference
-        names = [i.name for i in man.items if i.name] + [gh['name'] for gh in man.ghosts]
-        ci = counter_inference([n for n in names if n])
-        for num in ci['gaps']:
-            man.ghosts.append(dict(name=f'counter-gap-{num:04d}',
-                                   kind='gopro-media-counter', datetime=None,
-                                   survived='numbering gap'))
+            # ---- 3) GoPro media-counter inference -> named ghosts ----
+            from .carve.gopro import counter_inference
+            names = [i.name for i in man.items if i.name] + [gh['name'] for gh in man.ghosts]
+            ci = counter_inference([n for n in names if n])
+            for num in ci['gaps']:
+                man.ghosts.append(dict(name=f'counter-gap-{num:04d}',
+                                       kind='gopro-media-counter', datetime=None,
+                                       survived='numbering gap'))
 
-        man.save(out)
+            man.save(out)
         # drop directories that ended up empty (clu24/clu26/clu28-style
         # evidence with nothing in it is noise)
         import contextlib

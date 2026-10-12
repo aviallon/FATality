@@ -46,6 +46,123 @@ def salvage_rows(data: bytes) -> int:
         return -1
 
 
+def parse_mpf(data: bytes) -> list[tuple[int, int, int]]:
+    """MPF (CIPA DC-007) multi-picture index -> (offset, size, attrs) per image.
+
+    The MPF APP2 segment indexes ALL images of the file (primary + appended
+    previews/alternates) with exact byte ranges — proven provenance, unlike
+    content heuristics.  Offsets are file-relative (verified on GoPro files:
+    entry 1 = primary at offset 0); if that base fails validation the
+    common alternatives (APP2-relative) are tried.  Entries pointing to
+    anything that is not a complete JPEG stream are REFUSED — never guess
+    boundaries.
+    """
+    i = 2
+    app2 = -1
+    while i + 4 <= len(data) and data[i] == 0xFF:
+        m = data[i + 1]
+        if m == 0xDA:                    # SOS: header region over
+            break
+        ln = int.from_bytes(data[i + 2:i + 4], 'big')
+        if m == 0xE2 and data[i + 4:i + 8] == b'MPF\x00':
+            app2 = i
+            break
+        i += 2 + ln
+    if app2 < 0:
+        return []
+    import struct as _s
+    tiff = data[app2 + 4 + 4:]           # after 'MPF\0' comes the TIFF header
+    if len(tiff) < 8 or tiff[2:4] not in (b'\x00\x2a', b'\x2a\x00'):
+        return []
+    le = tiff[0:2] == b'II'
+
+    def u32(o: int) -> int:
+        return _s.unpack_from('<I' if le else '>I', tiff, o)[0]
+
+    def u16(o: int) -> int:
+        return _s.unpack_from('<H' if le else '>H', tiff, o)[0]
+    ifd = u32(4)
+    if not 0 <= ifd < len(tiff) - 2:
+        return []
+    n = u16(ifd)
+    num_images = 0
+    ent_blob: tuple[int, int] | None = None
+    for k in range(n):
+        e = ifd + 2 + 12 * k
+        if e + 12 > len(tiff):
+            return []
+        tag, typ, cnt = u16(e), u16(e + 2), u32(e + 4)
+        if tag == 0xB001 and typ == 4:
+            num_images = u32(e + 8)
+        elif tag == 0xB002:
+            ent_blob = (u32(e + 8), cnt)
+    if not ent_blob or num_images == 0:
+        return []
+    off, cnt = ent_blob
+    n_ent = min(num_images, cnt // 16)
+    if n_ent == 0 or off + 16 * n_ent > len(tiff):
+        return []
+    raw: list[tuple[int, int, int]] = []
+    for j in range(n_ent):
+        ent = tiff[off + 16 * j: off + 16 * j + 16]
+        attrs = int.from_bytes(ent[0:4], 'big')   # MPEntry fields are BE
+        size = int.from_bytes(ent[4:8], 'big')    # regardless of TIFF order
+        imoff = int.from_bytes(ent[8:12], 'big')
+        raw.append((imoff, size, attrs))
+    def valid_at(base: int, o: int, s: int) -> bool:
+        p = base + o
+        # declared size may exclude the EOI (observed on GoPro: -2): accept
+        # when a complete marker-walked stream starts at p within s + slack
+        if not (p >= 0 and p + 3 <= len(data) and s > 0
+                and data[p:p + 3] == b'\xff\xd8\xff'):
+            return False
+        e = find_eoi(data[p:p + s + 4])
+        return e is not None and e + 2 <= s + 4
+
+    out: list[tuple[int, int, int]] = []
+    for j, (o, s, a) in enumerate(raw):
+        if s <= 0:
+            continue
+        dependent = bool(a & 0x40000000)
+        bases: tuple[int, ...]
+        if j == 0 or not dependent:
+            bases = (0,)                      # file-relative (primary)
+        else:
+            # dependent images: offset relative to the MP Furst (observed:
+            # TIFF-header base fits exactly; others kept as fallback)
+            bases = (app2 + 8, app2, app2 + 4, 0)
+        for base in bases:
+            if valid_at(base, o, s):
+                p = base + o
+                ee = find_eoi(data[p:p + s + 4])
+                out.append((p, (ee + 2) if ee is not None else s, a))
+                break
+    return out
+
+
+def absorb_trailing_streams(data: bytes, start: int, limit: int = 8) -> int:
+    """Generic boundary-driven inclusion (extension-agnostic).
+
+    After the known end, absorb complete JPEG streams while their boundaries
+    are STANDARD: a full marker walk must reach its own EOI and the stream
+    must contain an SOF.  Bytes whose boundaries cannot be derived are never
+    absorbed, whatever they contain.
+    """
+    end = start
+    absorbed = 0
+    while absorbed < limit and end + 3 <= len(data) \
+            and data[end:end + 3] == b'\xff\xd8\xff':
+        e = find_eoi(data[end:])
+        if e is None or e < 1024:
+            break
+        probe = data[end:end + e + 2]
+        if b'\xff\xc0' not in probe and b'\xff\xc2' not in probe:
+            break
+        end += e + 2
+        absorbed += 1
+    return end
+
+
 def find_eoi(data: bytes) -> int | None:
     """Structural marker walk; offset of FFD9 or None."""
     i, n = 2, len(data)
@@ -140,10 +257,29 @@ class JpegHandler(Handler):
             if len(jpg) < 256 or not (b'\xff\xc0' in jpg or b'\xff\xc2' in jpg):
                 return ExtractResult(status='phantom',
                                      notes=['too small / no SOF: not a real image'])
+            # MPF (CIPA DC-007): the index knows ALL images of the file —
+            # appended previews included.  The recovered file is the COMPLETE
+            # multi-picture file, not just the primary stream.
+            mpf = parse_mpf(data)
+            if mpf:
+                end_mpf = max(o + s for o, s, _a in mpf)
+                if end_mpf > len(jpg):
+                    jpg = data[:end_mpf]
+                res.extras['mpf'] = mpf
+                res.extras['previews'] = [(o, s) for o, s, _a in mpf[1:]]
+                res.notes.append(
+                    f'MPF index: {len(mpf)} image(s), file is the complete '
+                    'multi-picture container')
+            else:
+                res.extras['previews'] = find_previews(jpg)
+            # NOT absorbed: unindexed trailing streams have standard
+            # boundaries AS STREAMS but their MEMBERSHIP in this file is not
+            # derivable — measured failure: on a contiguous card it MERGED
+            # neighbouring files into one.  Only an index (MPF) proves
+            # membership; unindexed streams stay separate carves.
             res.size = len(jpg)
             res.out_path = 'jpeg'         # caller decides naming
             res.extras['bytes'] = jpg
-            res.extras['previews'] = find_previews(jpg)
             res.status = 'complete'       # validate() decides final status
             return res
 

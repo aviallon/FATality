@@ -99,3 +99,89 @@ def test_tiny_eoi_junk_is_not_a_jpeg(tmp_path):
     with open(p, 'rb') as f:
         res = h.extract(f, 0)
     assert res.status == 'phantom'
+
+
+# ---------------------------------------------------------- MPF (DC-007) ----
+
+def _build_mpf(primary: bytes, secondaries: list[bytes]) -> bytes:
+    """A multi-picture JPEG: primary with an MPF APP2 index + appended images."""
+    import struct
+    n = 1 + len(secondaries)
+    ent_off = 8 + 2 + 24                 # TIFF header + IFD(2 entries)
+    ifd = (struct.pack('>H', 2)
+           + struct.pack('>HHII', 0xB001, 4, 1, n)
+           + struct.pack('>HHII', 0xB002, 7, 16 * n, ent_off))
+    tiff = b'MM\x00\x2a' + struct.pack('>I', 8) + ifd
+    entries = bytearray(16 * n)
+    payload = b'MPF\x00' + tiff + bytes(entries)
+    app2 = b'\xff\xe2' + (2 + len(payload)).to_bytes(2, 'big') + payload
+    prim = primary[:2] + app2 + primary[2:]
+    s1 = len(prim)
+    def entry(attrs, size, off):
+        # MP Entry = 16 bytes: attr(4) + size(4) + offset(4) + reserved(4)
+        return (attrs.to_bytes(4, 'big') + size.to_bytes(4, 'big')
+                + off.to_bytes(4, 'big') + b'\x00' * 4)
+    entries[0:16] = entry(0xA0030000, s1, 0)
+    pos = s1
+    for j, sec in enumerate(secondaries):
+        entries[16 * (j + 1):16 * (j + 2)] = entry(0x00010000, len(sec), pos)
+        pos += len(sec)
+    payload = b'MPF\x00' + tiff + bytes(entries)
+    app2 = b'\xff\xe2' + (2 + len(payload)).to_bytes(2, 'big') + payload
+    prim = primary[:2] + app2 + primary[2:]
+    return prim + b''.join(secondaries)
+
+
+def test_mpf_complete_file_includes_appended_images(tmp_path):
+    h = JpegHandler()
+    prim, sec1, sec2 = make_jpeg(), make_jpeg((160, 120), 1), make_jpeg((960, 720), 2)
+    full = _build_mpf(prim, [sec1, sec2])
+    p = tmp_path / 'in.bin'
+    p.write_bytes(full)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert res.status == 'complete'
+    assert len(res.extras['bytes']) == len(full)      # the COMPLETE MPF file
+    assert res.size == len(full)
+    mpf = res.extras['mpf']
+    assert len(mpf) == 3
+    assert res.extras['previews'] == [(o, s) for o, s, _a in mpf[1:]]
+    assert any('MPF' in n for n in res.notes)
+
+
+def test_mpf_index_previews_are_exact(tmp_path):
+    h = JpegHandler()
+    sec = make_jpeg((160, 120), 3)
+    full = _build_mpf(make_jpeg(), [sec])
+    p = tmp_path / 'in.bin'
+    p.write_bytes(full)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    off, size = res.extras['previews'][0]
+    assert res.extras['bytes'][off:off + size] == sec
+
+
+def test_unindexed_trailing_stream_never_merged(tmp_path):
+    """Regression: absorbing unindexed trailing streams MERGED neighbouring
+    files on a contiguous card (8 scenario regressions).  Only an index
+    proves membership — unindexed streams stay separate carves."""
+    h = JpegHandler()
+    prim, sec = make_jpeg(), make_jpeg((160, 120), 4)
+    full = prim + sec
+    p = tmp_path / 'in.bin'
+    p.write_bytes(full)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert res.size == len(prim)       # the second file stays separate
+
+
+def test_garbage_after_eoi_never_absorbed(tmp_path):
+    import random
+    h = JpegHandler()
+    junk = random.Random(42).randbytes(50_000)
+    full = make_jpeg() + junk
+    p = tmp_path / 'in.bin'
+    p.write_bytes(full)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert res.size == len(make_jpeg())     # only the standard-bounded part

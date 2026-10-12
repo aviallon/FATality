@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Scavenge everything recoverable from broken FAT filesystems: orphaned entries, stale directories, former formats, with specialised JPEG/MP4/GoPro extraction"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = [ "numpy>=2.0" ]
+dependencies = [ "numpy>=2.0", "rich>=13" ]
 
 [project.optional-dependencies]
 verify = [ "pillow>=10.0" ]
