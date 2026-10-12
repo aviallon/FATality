@@ -51,11 +51,11 @@ def parse_mpf(data: bytes) -> list[tuple[int, int, int]]:
 
     The MPF APP2 segment indexes ALL images of the file (primary + appended
     previews/alternates) with exact byte ranges — proven provenance, unlike
-    content heuristics.  Offsets are file-relative (verified on GoPro files:
-    entry 1 = primary at offset 0); if that base fails validation the
-    common alternatives (APP2-relative) are tried.  Entries pointing to
-    anything that is not a complete JPEG stream are REFUSED — never guess
-    boundaries.
+    content heuristics.  Per CIPA DC-007: the offset base is the "Start of
+    Offset" = the MP Endian field address (right after 'MPF\0'); entry 1 is
+    special-cased at file start.  MP Entry fields follow the MP Endian byte
+    order (NOT always big-endian).  Entries pointing to anything that is not
+    a complete JPEG stream are REFUSED — never guess boundaries.
     """
     i = 2
     app2 = -1
@@ -99,15 +99,17 @@ def parse_mpf(data: bytes) -> list[tuple[int, int, int]]:
     if not ent_blob or num_images == 0:
         return []
     off, cnt = ent_blob
-    n_ent = min(num_images, cnt // 16)
+    # the ARRAY length is authoritative (ExifTool/ExifReader do the same);
+    # NumberOfImages is advisory
+    n_ent = min(cnt // 16, 256)
     if n_ent == 0 or off + 16 * n_ent > len(tiff):
         return []
     raw: list[tuple[int, int, int]] = []
     for j in range(n_ent):
         ent = tiff[off + 16 * j: off + 16 * j + 16]
-        attrs = int.from_bytes(ent[0:4], 'big')   # MPEntry fields are BE
-        size = int.from_bytes(ent[4:8], 'big')    # regardless of TIFF order
-        imoff = int.from_bytes(ent[8:12], 'big')
+        # MP Entry fields follow the MP Endian byte order (CIPA DC-007 §5.2.2.1)
+        fmt = '<III' if le else '>III'
+        attrs, size, imoff = _s.unpack_from(fmt, ent, 0)
         raw.append((imoff, size, attrs))
     def valid_at(base: int, o: int, s: int) -> bool:
         p = base + o
@@ -123,13 +125,12 @@ def parse_mpf(data: bytes) -> list[tuple[int, int, int]]:
     for j, (o, s, a) in enumerate(raw):
         if s <= 0:
             continue
-        dependent = bool(a & 0x40000000)
         bases: tuple[int, ...]
-        if j == 0 or not dependent:
-            bases = (0,)                      # file-relative (primary)
+        if j == 0:
+            bases = (0,)                      # entry 1: file start (special)
         else:
-            # dependent images: offset relative to the MP Furst (observed:
-            # TIFF-header base fits exactly; others kept as fallback)
+            # "Start of Offset" = MP Endian field address (app2 + 8);
+            # file-absolute kept as fallback for non-conforming writers
             bases = (app2 + 8, app2, app2 + 4, 0)
         for base in bases:
             if valid_at(base, o, s):

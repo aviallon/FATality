@@ -103,24 +103,28 @@ def test_tiny_eoi_junk_is_not_a_jpeg(tmp_path):
 
 # ---------------------------------------------------------- MPF (DC-007) ----
 
-def _build_mpf(primary: bytes, secondaries: list[bytes]) -> bytes:
+def _build_mpf(primary: bytes, secondaries: list[bytes], endian: str = 'MM') -> bytes:
     """A multi-picture JPEG: primary with an MPF APP2 index + appended images."""
     import struct
     n = 1 + len(secondaries)
     ent_off = 8 + 2 + 24                 # TIFF header + IFD(2 entries)
-    ifd = (struct.pack('>H', 2)
-           + struct.pack('>HHII', 0xB001, 4, 1, n)
-           + struct.pack('>HHII', 0xB002, 7, 16 * n, ent_off))
-    tiff = b'MM\x00\x2a' + struct.pack('>I', 8) + ifd
+    e = '<' if endian == 'II' else '>'
+    ifd = (struct.pack(e + 'H', 2)
+           + struct.pack(e + 'HHII', 0xB001, 4, 1, n)
+           + struct.pack(e + 'HHII', 0xB002, 7, 16 * n, ent_off))
+    tiff = (b'II\x2a\x00' if endian == 'II' else b'MM\x00\x2a') \
+        + struct.pack(e + 'I', 8) + ifd
     entries = bytearray(16 * n)
     payload = b'MPF\x00' + tiff + bytes(entries)
     app2 = b'\xff\xe2' + (2 + len(payload)).to_bytes(2, 'big') + payload
     prim = primary[:2] + app2 + primary[2:]
     s1 = len(prim)
+    bo = 'little' if endian == 'II' else 'big'
     def entry(attrs, size, off):
-        # MP Entry = 16 bytes: attr(4) + size(4) + offset(4) + reserved(4)
-        return (attrs.to_bytes(4, 'big') + size.to_bytes(4, 'big')
-                + off.to_bytes(4, 'big') + b'\x00' * 4)
+        # MP Entry = 16 bytes: attr(4) + size(4) + offset(4) + dep(4);
+        # fields follow the MP Endian byte order (CIPA DC-007 §5.2.2.1)
+        return (attrs.to_bytes(4, bo) + size.to_bytes(4, bo)
+                + off.to_bytes(4, bo) + b'\x00' * 4)
     entries[0:16] = entry(0xA0030000, s1, 0)
     pos = s1
     for j, sec in enumerate(secondaries):
@@ -185,3 +189,18 @@ def test_garbage_after_eoi_never_absorbed(tmp_path):
     with open(p, 'rb') as f:
         res = h.extract(f, 0)
     assert res.size == len(make_jpeg())     # only the standard-bounded part
+
+
+def test_mpf_little_endian_index(tmp_path):
+    """MP Entry fields follow the MP Endian byte order — an II file must
+    parse exactly like an MM one (spec correction, not 'always big-endian')."""
+    h = JpegHandler()
+    sec = make_jpeg((160, 120), 7)
+    full = _build_mpf(make_jpeg(), [sec], endian='II')
+    p = tmp_path / 'in.bin'
+    p.write_bytes(full)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert len(res.extras.get('mpf', [])) == 2
+    off, size = res.extras['previews'][0]
+    assert res.extras['bytes'][off:off + size] == sec

@@ -10,3 +10,4 @@ smoke-out/
 *.vhd
 **/run/
 fatality-out/
+fatality-out*/
