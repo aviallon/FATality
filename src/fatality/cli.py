@@ -186,6 +186,27 @@ def _assign_mp4_names(members: list[dict],
     return result
 
 
+def _psnr(a: bytes, b: bytes) -> float:
+    """PSNR between two JPEG blobs (b resized to a's size), grayscale.
+
+    Links anonymous previews to their parent photos.  Measured on a real
+    card: same-content re-encodes score 29-36 dB, unrelated images 10-12 dB
+    — bimodal, one threshold separates the classes.
+    """
+    try:
+        import io
+
+        import numpy as np
+        from PIL import Image
+        ia = Image.open(io.BytesIO(a)).convert('L')
+        ib = Image.open(io.BytesIO(b)).convert('L').resize(ia.size)
+        na, nb = np.asarray(ia, dtype=float), np.asarray(ib, dtype=float)
+        mse = float(((na - nb) ** 2).mean())
+        return 99.0 if mse == 0 else 10.0 * float(np.log10(255.0 ** 2 / mse))
+    except Exception:                              # noqa: BLE001
+        return -1.0
+
+
 def cmd_extract(args) -> int:
     img = Path(args.image)
     out = Path(args.out)
@@ -316,7 +337,9 @@ def cmd_extract(args) -> int:
                         mp4_targets.append((off, res.name or f'mp4_off{off:013d}',
                                             res.datetime))
                     continue
-                name = res.name or f'{h.name}_off{off:013d}'
+                name = (res.name or
+                        f'{h.name}_off{off:013d}'
+                        + {'jpeg': '.jpg', 'mp4': '.mp4'}.get(h.name, ''))
                 pending.append((off, h, res, name))
                 if h.name == 'mp4':
                     mp4_targets.append((off, name, res.datetime))
@@ -347,21 +370,31 @@ def cmd_extract(args) -> int:
             # NOTHING is garbage (measured: 236/273 on a real card); real
             # fragments go to evidence/, away from the deliverables
             frag_dir = ''
-            if h.name == 'jpeg' and not res.name and res.status != 'complete':
-                from .carve.jpeg import salvage_rows
-                # <= 0: zero rows OR unopenable — measured: Pillow cannot
-                # open exactly the entropy false-positives
-                if salvage_rows(blob) <= 0:
-                    man.items.append(Item(path='', status='noise',
-                                          source=f'carve:{h.name}', offset=off,
-                                          size=res.size,
-                                          evidence=['no decodable rows: '
-                                                    'not written']))
-                    continue
-                frag_dir = 'fragments'
+            dest = 'carved'
+            if h.name == 'jpeg' and not res.name:
+                if res.status != 'complete':
+                    from .carve.jpeg import salvage_rows
+                    # <= 0: zero rows OR unopenable — measured: Pillow cannot
+                    # open exactly the entropy false-positives
+                    if salvage_rows(blob) <= 0:
+                        man.items.append(Item(path='', status='noise',
+                                              source=f'carve:{h.name}', offset=off,
+                                              size=res.size,
+                                              evidence=['no decodable rows: '
+                                                        'not written']))
+                        continue
+                    frag_dir = 'fragments'
+                else:
+                    # anonymous COMPLETE image: a preview class artefact
+                    # (GoPro writes 960x720 PREVIEW960 streams) — grouped as
+                    # previews, renamed to their parent when provable below
+                    dest = 'previews'
+                    name = f'PREVIEW960_{off:013d}.jpg'
             base = out / 'carved' / h.name
             if frag_dir:
                 base = out / 'evidence' / 'fragments' / h.name
+            elif dest == 'previews':
+                base = out / 'carved' / 'previews'
             path = base / _safe(name)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(blob)
@@ -457,7 +490,7 @@ def cmd_extract(args) -> int:
             reassembly_records.append(
                 (rec_item, out_mp4, off,
                  (r.moov.creation_iso if r.moov else None) or dt,
-                 r.bytes_written, name))
+                 r.bytes_written, name, r.runs))
             if ok:
                 covered.append((off, off + r.bytes_written))
                 if not args.keep_intermediates:
@@ -482,13 +515,13 @@ def cmd_extract(args) -> int:
                         name=(r_hint if not r_hint.startswith('mp4_off')
                               else None),
                         creation=r_creation, size=r_size)
-                   for _it, _p, r_off, r_creation, r_size, r_hint
+                   for _it, _p, r_off, r_creation, r_size, r_hint, _runs
                    in reassembly_records]
         resolved = _assign_mp4_names(
             members,
             [i.name for i in man.items if i.name]
             + [gh['name'] for gh in man.ghosts])
-        for rec_item, out_mp4, r_off, _rc, _rs, _r_hint in reassembly_records:
+        for rec_item, out_mp4, r_off, _rc, _rs, _r_hint, _runs in reassembly_records:
             new_name = resolved.get(r_off)
             if new_name and out_mp4.exists():
                 stem2 = (new_name[:-4] if new_name.upper().endswith('.MP4')
@@ -501,6 +534,70 @@ def cmd_extract(args) -> int:
                     rec_item.evidence = list(rec_item.evidence or []) + [
                         f'named by media-counter inference: {new_name}']
                     _apply_datetime(final, rec_item.datetime)
+
+        # ---- 3c) attach anonymous previews to their parent file ----
+        # provenance is PROVEN, not guessed: a preview's physical offset must
+        # map inside exactly one reassembled file's extent runs
+        # (phys = file_off + delta).  Ambiguous -> keep it standalone.
+        def _extent_parent(offset: int) -> str | None:
+            hits: set[str] = set()
+            for rec_item, _p_mp4, _o, _c, _s, _h, runs in reassembly_records:
+                for fs, fe, delta in runs or ():
+                    if fs <= offset - delta < fe:
+                        nm = rec_item.name or ''
+                        hits.add(nm.replace('.reassembled.mp4', ''))
+                        break
+            return hits.pop() if len(hits) == 1 else None
+
+        for it in man.items:
+            if (it.source == 'carve:jpeg' and it.path and it.offset
+                    and '/previews/' in it.path):
+                parent = _extent_parent(it.offset)
+                note = ''
+                if parent:
+                    note = f'preview of {parent} (physical extent match)'
+                else:
+                    # content-based link: the preview is a re-encode of its
+                    # photo — measured 29-36 dB same content vs 10-12 dB
+                    # unrelated (bimodal; a margin rule blocks near-ties).
+                    # Candidates are the PHOTOS only: a preview would match
+                    # ITSELF at 99 dB and its siblings at 30+ dB.
+                    blob = Path(it.path).read_bytes()
+                    scored = sorted(
+                        ((_psnr(blob, b), nm) for nm, b in complete_blobs
+                         if nm.upper().endswith(('.JPG', '.JPEG'))
+                         and 'PREVIEW' not in nm.upper()
+                         and 'THM' not in nm.upper()
+                         and nm != it.name),
+                        reverse=True)
+                    if (len(scored) >= 2 and scored[0][0] >= 25.0
+                            and scored[0][0] - scored[1][0] >= 3.0):
+                        parent = scored[0][1].rsplit('.', 1)[0]
+                        note = (f'content match: PSNR {scored[0][0]:.1f} dB '
+                                f'vs {scored[0][1]} '
+                                f'(2nd best {scored[1][0]:.1f} dB)')
+                if parent and '.PREVIEW960.' not in (it.name or ''):
+                    new = Path(it.path).with_name(
+                        _safe(f'{parent}.PREVIEW960.jpg'))
+                    Path(it.path).rename(new)
+                    it.path = str(new)
+                    it.name = new.name
+                    it.evidence = list(it.evidence or []) + [note]
+                else:
+                    # no extent, no content match: keep identity, record the
+                    # placement hint (GoPro writes each preview just BEFORE
+                    # its video's ftyp anchor) as manifest evidence only —
+                    # a guessed name is worse than an anonymous one
+                    near = min(reassembly_records,
+                               key=lambda r: abs(r[2] - it.offset)
+                               if r[2] >= it.offset else 1 << 62,
+                               default=None)
+                    if near and near[2] - it.offset < (256 << 10):
+                        hint = near[0].name or near[1].name
+                        it.evidence = list(it.evidence or []) + [
+                            f'preview-class artefact {near[2] - it.offset}B '
+                            f'before {hint} ftyp anchor (camera placement '
+                            'pattern: likely its preview)']
 
         # ---- 4) container-independent H.264 media salvage ----
         # No ftyp/moov needed: validated NAL runs are frames without time.
