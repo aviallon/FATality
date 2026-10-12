@@ -207,6 +207,13 @@ def cmd_extract(args) -> int:
                         man.ghosts.append(dict(name=res.name, kind=h.name,
                                                datetime=res.datetime,
                                                survived='identity only'))
+                    if h.name == 'mp4' and res.status != 'phantom':
+                        # no carveable bytes, but a real ftyp anchor: the
+                        # reassembly engine maps fragments on its own — this
+                        # is how videos without a surviving dir entry get
+                        # attempted at all
+                        mp4_targets.append((off, res.name or f'mp4_off{off:013d}',
+                                            res.datetime))
                     continue
                 name = res.name or f'{h.name}_off{off:013d}'
                 pending.append((off, h, res, name))
@@ -273,11 +280,15 @@ def cmd_extract(args) -> int:
         # the contiguous-span carve / chain dump is an INTERMEDIATE: by
         # default it is removed once a validated reassembly supersedes it
         done_stems: set[str] = set()
+        seen_offs: set[int] = set()
         for off, name, dt in mp4_targets:
-            stem = Path(name).stem
-            if stem in done_stems:
+            # strip ONLY a real .mp4 extension: Path('x.LRV').stem would eat
+            # '.LRV' and mislabel a low-res reassembly as the full-res video
+            stem = name[:-4] if name.upper().endswith('.MP4') else name
+            if stem in done_stems or off in seen_offs:
                 continue
             done_stems.add(stem)
+            seen_offs.add(off)
             out_mp4 = out / 'carved' / 'mp4' / f'{stem}.reassembled.mp4'
             out_mp4.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -319,7 +330,8 @@ def cmd_extract(args) -> int:
                         nm = (it.name or '').upper()
                         if (it.path and it.name
                                 and nm.endswith(('.MP4', '.LRV'))
-                                and Path(it.name).stem == stem
+                                and (it.name[:-4] if it.name.upper().endswith('.MP4')
+                                     else it.name) == stem
                                 and it.source in ('carve:mp4', 'dir-entry')):
                             old = Path(it.path)
                             if old.exists() and old != out_mp4:
