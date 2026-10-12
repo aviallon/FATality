@@ -15,6 +15,7 @@ Output layout of `extract` (conservative split policy):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -111,6 +112,80 @@ def _safe(name: str) -> str:
     return name.replace('/', '_').replace('\\', '_').replace('\x00', '') or 'unnamed'
 
 
+def _usable_name(name: str, fallback: str) -> str:
+    """A broken LFN decoded into control-character garbage must never become
+    a filename.  Measured on real output: legitimate names are printable;
+    mojibake carries C0/C1 controls.  (ASCII is valid UTF-8 — a naive
+    'decodes as UTF-8' test would reject every real name.)"""
+    if not name:
+        return fallback
+    printable = sum(1 for c in name if c.isprintable())
+    if printable < 0.9 * len(name):
+        return fallback
+    if all(ord(c) < 128 for c in name):
+        return name
+    try:
+        fixed = name.encode('latin-1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name                      # legitimate non-ASCII text
+    return fixed if all(c.isprintable() for c in fixed) else fallback
+
+
+def _assign_mp4_names(members: list[dict],
+                      all_names: list[str] | None = None) -> dict[int, str]:
+    """Name reassembled videos the way the manual pipeline did.
+
+    GoPro photos and videos share one media counter: the photo names leave
+    GAPS exactly where the videos were (3655 -> photos 3656-3665 -> videos
+    3666-3668 -> photos 3669-...).  Videos were never named from embedded
+    records (the HERO5 Session telemetry has none) — the names are INFERRED:
+      1. twin rule: same creation time as a named file = its MP4/LRV sibling;
+      2. counter gaps fill unnamed full-res pairs in creation order;
+      3. honest datetime fallback — never guess a counter that cannot be
+         proven (a misnamed file is worse than an unnamed one).
+    """
+    from .carve.gopro import counter_inference
+    names = list(all_names or []) + [m['name'] for m in members if m['name']]
+    gaps = sorted(counter_inference([n for n in names if n])['gaps'])
+    groups: dict[str, list[dict]] = {}
+    for m in members:
+        groups.setdefault(m['creation'] or f"__off{m['off']}", []).append(m)
+    result: dict[int, str] = {}
+    # 1) twins of a named member
+    for grp in groups.values():
+        named = [m for m in grp if m['name']]
+        if not named:
+            continue
+        base = named[0]['name']
+        stem = base[:-4] if base.upper().endswith('.MP4') else base
+        for m in grp:
+            if m['name']:
+                continue
+            if base.upper().endswith(('.LRV', '.LRV.MP4')):
+                result[m['off']] = f'{stem[:-4] if stem.upper().endswith(".LRV") else stem}.MP4'
+            else:
+                result[m['off']] = f'{stem}.LRV'
+    # 2) counter gaps -> unnamed pairs (full-res + its LRV twin)
+    unnamed = [grp for grp in groups.values()
+               if not any(m['name'] or m['off'] in result for m in grp)]
+    unnamed.sort(key=lambda grp: min(m['creation'] or '' for m in grp))
+    pairs = [grp for grp in unnamed if len(grp) >= 2]
+    for gap, grp in zip(gaps, pairs, strict=False):
+        big, small = sorted(grp, key=lambda u: -u['size'])[:2]
+        result[big['off']] = f'GOPR{gap:04d}.MP4'
+        result[small['off']] = f'GOPR{gap:04d}.LRV'
+    # 3) honest fallback
+    for grp in unnamed:
+        for m in grp:
+            if m['off'] not in result:
+                dt = (m['creation'] or 'unknown-date').replace(':', '') \
+                    .replace('-', '').replace('T', '-')[:15]
+                largest = max(u['size'] for u in grp)
+                suffix = 'LRV' if m['size'] < largest else 'MP4'
+                result[m['off']] = f'{dt}.partial.{suffix}.mp4'
+    return result
+
+
 def cmd_extract(args) -> int:
     img = Path(args.image)
     out = Path(args.out)
@@ -119,6 +194,18 @@ def cmd_extract(args) -> int:
     man = Manifest(image=str(img))
     mp4_targets: list[tuple[int, str, str | None]] = []
     counts = dict(phantom=0, degraded=0)
+    seen_content: dict[str, str] = {}      # sha256 -> first written path
+
+    def _dedup(blob: bytes, path) -> str | None:
+        """Content already written? then record a pointer, not a second file.
+        First occurrence CLAIMS the hash: the map must be written here or the
+        deduplication silently never fires."""
+        h = hashlib.sha256(blob).hexdigest()
+        prior = seen_content.get(h)
+        if prior is None:
+            seen_content[h] = str(path)
+        return prior
+
 
     with open(img, 'rb') as f:
         g = _primary_geometry(f, size)
@@ -156,7 +243,21 @@ def cmd_extract(args) -> int:
                                                   evidence=ev + ['no data bytes'],
                                                   generation=label))
                             continue
-                        path = sub / _safe(s.display)
+                        dup = _dedup(data, sub / _safe(
+                            _usable_name(s.display, f'clu{s.cluster:07d}.bin')))
+                        if dup:
+                            man.items.append(Item(path='', status='duplicate',
+                                                  source='dir-entry', name=s.display,
+                                                  datetime=s.wr_date,
+                                                  evidence=ev + [f'same bytes as {dup}'],
+                                                  generation=label))
+                            continue
+                        display = _usable_name(s.display,
+                                               f'clu{s.cluster:07d}.bin')
+                        if display != s.display:
+                            ev.append(f'broken LFN, kept anonymous '
+                                      f'(raw name: {s.display.encode("unicode_escape").decode()})')
+                        path = sub / _safe(display)
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(data)
                         _apply_datetime(path, s.wr_date)
@@ -235,7 +336,33 @@ def cmd_extract(args) -> int:
                                       evidence=[f'bytes contained in {subsumed_by}: '
                                                 'not written']))
                 continue
-            path = out / 'carved' / h.name / _safe(name)
+            dup = _dedup(blob, out / 'carved' / h.name / _safe(name))
+            if dup:
+                man.items.append(Item(path='', status='duplicate',
+                                      source=f'carve:{h.name}', offset=off,
+                                      size=res.size, name=res.name,
+                                      evidence=[f'same bytes as {dup}']))
+                continue
+            # value gate for anonymous fragments: a fragment that decodes to
+            # NOTHING is garbage (measured: 236/273 on a real card); real
+            # fragments go to evidence/, away from the deliverables
+            frag_dir = ''
+            if h.name == 'jpeg' and not res.name and res.status != 'complete':
+                from .carve.jpeg import salvage_rows
+                # <= 0: zero rows OR unopenable — measured: Pillow cannot
+                # open exactly the entropy false-positives
+                if salvage_rows(blob) <= 0:
+                    man.items.append(Item(path='', status='noise',
+                                          source=f'carve:{h.name}', offset=off,
+                                          size=res.size,
+                                          evidence=['no decodable rows: '
+                                                    'not written']))
+                    continue
+                frag_dir = 'fragments'
+            base = out / 'carved' / h.name
+            if frag_dir:
+                base = out / 'evidence' / 'fragments' / h.name
+            path = base / _safe(name)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(blob)
             _apply_datetime(path, res.datetime)
@@ -256,6 +383,8 @@ def cmd_extract(args) -> int:
                     if plen <= 0:
                         continue
                     pv = blob[poff:poff + plen]
+                    if _dedup(pv, path.with_name(f'{path.stem}.PREVIEW{pi:02d}.jpg')):
+                        continue
                     ppath = path.with_name(f'{path.stem}.PREVIEW{pi:02d}.jpg')
                     ppath.write_bytes(pv)
                     _apply_datetime(ppath, res.datetime)
@@ -281,6 +410,7 @@ def cmd_extract(args) -> int:
         # default it is removed once a validated reassembly supersedes it
         done_stems: set[str] = set()
         seen_offs: set[int] = set()
+        reassembly_records: list[tuple] = []
         for off, name, dt in mp4_targets:
             # strip ONLY a real .mp4 extension: Path('x.LRV').stem would eat
             # '.LRV' and mislabel a low-res reassembly as the full-res video
@@ -309,20 +439,25 @@ def cmd_extract(args) -> int:
             ok = r.status == 'complete' and st.all_ok
             if out_mp4.exists():
                 _apply_datetime(out_mp4, dt)
-            man.items.append(Item(path=str(out_mp4) if out_mp4.exists() else '',
-                                  status='complete' if ok else r.status,
-                                  source='reassemble:mp4', offset=off,
-                                  size=r.bytes_written, name=out_mp4.name,
-                                  datetime=dt,
-                                  evidence=[f'samples: nal_ok={st.nal_ok} '
-                                            f'nal_bad={st.nal_bad} '
-                                            f'desc_ok={st.descriptors_ok} '
-                                            f'gpmd_ok={st.gpmd_ok}',
-                                            f'mapped={r.mapped_bytes}/'
-                                            f'{r.file_size}',
-                                            *r.notes],
-                                  generation='carved',
-                                  validated=('ok' if st.all_ok else 'fail')))
+            rec_item = Item(path=str(out_mp4) if out_mp4.exists() else '',
+                            status='complete' if ok else r.status,
+                            source='reassemble:mp4', offset=off,
+                            size=r.bytes_written, name=out_mp4.name,
+                            datetime=dt,
+                            evidence=[f'samples: nal_ok={st.nal_ok} '
+                                      f'nal_bad={st.nal_bad} '
+                                      f'desc_ok={st.descriptors_ok} '
+                                      f'gpmd_ok={st.gpmd_ok}',
+                                      f'mapped={r.mapped_bytes}/'
+                                      f'{r.file_size}',
+                                      *r.notes],
+                            generation='carved',
+                            validated=('ok' if st.all_ok else 'fail'))
+            man.items.append(rec_item)
+            reassembly_records.append(
+                (rec_item, out_mp4, off,
+                 (r.moov.creation_iso if r.moov else None) or dt,
+                 r.bytes_written, name))
             if ok:
                 covered.append((off, off + r.bytes_written))
                 if not args.keep_intermediates:
@@ -341,6 +476,31 @@ def cmd_extract(args) -> int:
                             it.evidence = list(it.evidence or []) + [
                                 f'intermediate removed: superseded by '
                                 f'{out_mp4.name}']
+
+        # ---- 3b) name the reassemblies (GoPro media-counter inference) ----
+        members = [dict(off=r_off,
+                        name=(r_hint if not r_hint.startswith('mp4_off')
+                              else None),
+                        creation=r_creation, size=r_size)
+                   for _it, _p, r_off, r_creation, r_size, r_hint
+                   in reassembly_records]
+        resolved = _assign_mp4_names(
+            members,
+            [i.name for i in man.items if i.name]
+            + [gh['name'] for gh in man.ghosts])
+        for rec_item, out_mp4, r_off, _rc, _rs, _r_hint in reassembly_records:
+            new_name = resolved.get(r_off)
+            if new_name and out_mp4.exists():
+                stem2 = (new_name[:-4] if new_name.upper().endswith('.MP4')
+                         else new_name)
+                final = out_mp4.with_name(_safe(f'{stem2}.reassembled.mp4'))
+                if final != out_mp4:
+                    out_mp4.rename(final)
+                    rec_item.path = str(final)
+                    rec_item.name = final.name
+                    rec_item.evidence = list(rec_item.evidence or []) + [
+                        f'named by media-counter inference: {new_name}']
+                    _apply_datetime(final, rec_item.datetime)
 
         # ---- 4) container-independent H.264 media salvage ----
         # No ftyp/moov needed: validated NAL runs are frames without time.
@@ -382,6 +542,8 @@ def cmd_extract(args) -> int:
                 continue
             if any(frames in blob for _, blob in complete_blobs):
                 continue
+            if _dedup(frames, out / 'carved' / 'h264' / f'h264_run_{a:013d}.h264'):
+                continue
             name = f'h264_run_{a:013d}.h264'
             path = out / 'carved' / 'h264' / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -412,6 +574,13 @@ def cmd_extract(args) -> int:
                                    survived='numbering gap'))
 
         man.save(out)
+        # drop directories that ended up empty (clu24/clu26/clu28-style
+        # evidence with nothing in it is noise)
+        import contextlib
+        for d in sorted((p for p in out.rglob('*') if p.is_dir()),
+                        key=lambda p: -len(p.parts)):
+            with contextlib.suppress(OSError):
+                d.rmdir()
         (out / 'graveyard.md').write_text(man.graveyard_md())
         summary = man.summary()
         summary.update(counts)

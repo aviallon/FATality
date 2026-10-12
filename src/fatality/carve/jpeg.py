@@ -20,6 +20,32 @@ NAME_REC_RE = re.compile(rb'[\x20-\x7e]{2,20}\\[\x20-\x7e]{2,60}\\[\x20-\x7e]{1,
 DT_RE = re.compile(rb'20\d\d:\d\d:\d\d \d\d:\d\d:\d\d')
 
 
+def salvage_rows(data: bytes) -> int:
+    """How many rows of REAL content decode (truncated-tolerant).
+
+    The value gate for anonymous fragments: measured on a real card, the
+    fragments are bimodal — either real image rows or nothing at all.
+    Returns -1 when undecidable (no Pillow): the caller keeps the fragment.
+    """
+    try:
+        import io
+
+        from PIL import Image, ImageFile
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        px = img.convert('L')
+        w, h = px.size
+        d = list(px.getdata())
+        rows = 0
+        for y in range(h):
+            if len(set(d[y * w:(y + 1) * w])) > 8:
+                rows += 1
+        return rows
+    except Exception:                              # noqa: BLE001
+        return -1
+
+
 def find_eoi(data: bytes) -> int | None:
     """Structural marker walk; offset of FFD9 or None."""
     i, n = 2, len(data)

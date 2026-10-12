@@ -17,6 +17,11 @@ PATH_REC_RE = re.compile(
     rb'[A-Z]:\\[\x20-\x7e]{2,60}'
     rb'|[\x20-\x7e]{2,20}\\[\x20-\x7e]{2,60}\\[\x20-\x7e]{1,20}\.[A-Za-z]{3}')
 GOPRO_NAME_RE = re.compile(r'(GOPR|GH0\d|GL0\d|GX0\d|GPFR|G)(\d{4})\.([A-Z]{3})')
+# counter extraction for gap analysis: must understand BOTH filename forms —
+# GOPR3655 (counter directly) and G0013656 (rollover 001 + counter 3656),
+# which share ONE media counter series.  GOPRO_NAME_RE alone never matched
+# the photo form, so the video gaps were invisible.
+COUNTER_RE = re.compile(r'(?:GOPR|GH0\d|GL0\d|GX0\d|GPFR|G)(\d{3})?(\d{4})\.')
 DT_RE = re.compile(rb'20\d\d:\d\d:\d\d \d\d:\d\d:\d\d')
 
 
@@ -35,7 +40,7 @@ def counter_inference(names: list[str]) -> dict:
     """Gap analysis over GoPro media counters -> named ghosts."""
     nums = []
     for n in names:
-        m = GOPRO_NAME_RE.match(n.upper())
+        m = COUNTER_RE.search(n.upper())
         if m:
             nums.append(int(m.group(2)))
     ghosts = []
