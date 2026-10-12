@@ -9,3 +9,4 @@ smoke-out/
 *.vfat
 *.vhd
 **/run/
+fatality-out/

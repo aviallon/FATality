@@ -109,6 +109,11 @@ class JpegHandler(Handler):
         eoi = find_eoi(data)
         if eoi is not None:
             jpg = data[:eoi + 2]
+            # a real image has an SOF and a body: a 4-byte 'carve' is a
+            # false positive on entropy data, not salvage
+            if len(jpg) < 256 or not (b'\xff\xc0' in jpg or b'\xff\xc2' in jpg):
+                return ExtractResult(status='phantom',
+                                     notes=['too small / no SOF: not a real image'])
             res.size = len(jpg)
             res.out_path = 'jpeg'         # caller decides naming
             res.extras['bytes'] = jpg

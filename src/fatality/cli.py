@@ -117,6 +117,7 @@ def cmd_extract(args) -> int:
     out.mkdir(parents=True, exist_ok=True)
     size = img.stat().st_size
     man = Manifest(image=str(img))
+    mp4_targets: list[tuple[int, str, str | None]] = []
     counts = dict(phantom=0, degraded=0)
 
     with open(img, 'rb') as f:
@@ -147,10 +148,21 @@ def cmd_extract(args) -> int:
                         ev.append(f'chain:{ch.evidence}')
                         f.seek(g.cluster_off(s.cluster))
                         data = f.read(min(s.size, ch.length * g.cluster_bytes))
+                        if not data:
+                            # name evidence only: an empty file is garbage
+                            man.items.append(Item(path='', status='name-only',
+                                                  source='dir-entry', name=s.display,
+                                                  datetime=s.wr_date,
+                                                  evidence=ev + ['no data bytes'],
+                                                  generation=label))
+                            continue
                         path = sub / _safe(s.display)
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(data)
                         _apply_datetime(path, s.wr_date)
+                        if s.display.upper().endswith(('.MP4', '.LRV')):
+                            mp4_targets.append((g.cluster_off(s.cluster),
+                                                s.display, s.wr_date))
                         status = 'complete' if len(data) == s.size else 'partial'
                         validated = 'unvalidated'
                         hname = EXT_HANDLER.get(Path(s.display).suffix.lower())
@@ -176,6 +188,7 @@ def cmd_extract(args) -> int:
         # ---- 2) handler carving on signature hits (decode-gated) ----
         hits = scan_signatures(f, g.data_off, end, SIGS)
         covered: list[tuple[int, int]] = []
+        pending = []
         for h in carve.handlers():
             key = {'jpeg': 'jpeg', 'mp4': 'mp4_ftyp'}.get(h.name)
             if key is None:
@@ -196,16 +209,46 @@ def cmd_extract(args) -> int:
                                                survived='identity only'))
                     continue
                 name = res.name or f'{h.name}_off{off:013d}'
-                path = out / 'carved' / h.name / _safe(name)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(res.extras['bytes'])
-                _apply_datetime(path, res.datetime)
-                # attach embedded previews as linked companions — for a
-                # broken file the preview is the best surviving view
+                pending.append((off, h, res, name))
+                if h.name == 'mp4':
+                    mp4_targets.append((off, name, res.datetime))
+
+        # write BIG first: a carve whose bytes live inside a complete file
+        # is redundant — recorded as 'subsumed', never written (this was the
+        # single biggest source of garbage in the output)
+        complete_blobs: list[tuple[str, bytes]] = []
+        for off, h, res, name in sorted(pending,
+                                        key=lambda t: -len(t[2].extras['bytes'])):
+            blob = res.extras['bytes']
+            subsumed_by = next((nm for nm, b in complete_blobs if blob in b), None)
+            if subsumed_by:
+                man.items.append(Item(path='', status='subsumed',
+                                      source=f'carve:{h.name}', offset=off,
+                                      size=res.size, name=res.name,
+                                      evidence=[f'bytes contained in {subsumed_by}: '
+                                                'not written']))
+                continue
+            path = out / 'carved' / h.name / _safe(name)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(blob)
+            _apply_datetime(path, res.datetime)
+            v = h.validate(str(path))
+            status = res.status
+            if status == 'complete' and not v.ok:
+                status = 'partial'
+                counts['degraded'] += 1
+                res.notes.append('decode-validation failed: downgraded')
+            if status == 'complete':
+                complete_blobs.append((path.name, blob))
+                if h.name == 'mp4':
+                    covered.append((off, off + len(blob)))
+            # embedded previews as companions ONLY for broken files — a
+            # complete file already carries its preview inside its own bytes
+            if status != 'complete':
                 for pi, (poff, plen) in enumerate(res.extras.get('previews') or []):
                     if plen <= 0:
                         continue
-                    pv = res.extras['bytes'][poff:poff + plen]
+                    pv = blob[poff:poff + plen]
                     ppath = path.with_name(f'{path.stem}.PREVIEW{pi:02d}.jpg')
                     ppath.write_bytes(pv)
                     _apply_datetime(ppath, res.datetime)
@@ -218,25 +261,76 @@ def cmd_extract(args) -> int:
                         evidence=[f'embedded preview of {path.name}'],
                         generation='carved',
                         validated=f'{"ok" if pv_res.ok else "fail"}: {pv_res.detail}'))
-                v = h.validate(str(path))
-                status = res.status
-                if status == 'complete' and not v.ok:
-                    status = 'partial'
-                    counts['degraded'] += 1
-                    res.notes.append('decode-validation failed: downgraded')
-                man.items.append(Item(path=str(path), status=status,
-                                      source=f'carve:{h.name}', offset=off,
-                                      size=res.size, name=res.name,
-                                      datetime=res.datetime,
-                                      evidence=res.notes, damage=res.damage,
-                                      generation='carved',
-                                      validated=f'{"ok" if v.ok else "fail"}: {v.detail}'))
-                if h.name == 'mp4' and res.extras.get('bytes') and status == 'complete':
-                    # only a decode-complete MP4 suppresses media salvage;
-                    # a fragmented contiguous-span must not hide good NAL runs
-                    covered.append((off, off + len(res.extras['bytes'])))
+            man.items.append(Item(path=str(path), status=status,
+                                  source=f'carve:{h.name}', offset=off,
+                                  size=res.size, name=res.name,
+                                  datetime=res.datetime,
+                                  evidence=res.notes, damage=res.damage,
+                                  generation='carved',
+                                  validated=f'{"ok" if v.ok else "fail"}: {v.detail}'))
 
-        # ---- 3) container-independent H.264 media salvage ----
+        # ---- 3) MP4 reassembly: the deliverable is the whole MOVIE ----
+        # the contiguous-span carve / chain dump is an INTERMEDIATE: by
+        # default it is removed once a validated reassembly supersedes it
+        done_stems: set[str] = set()
+        for off, name, dt in mp4_targets:
+            stem = Path(name).stem
+            if stem in done_stems:
+                continue
+            done_stems.add(stem)
+            out_mp4 = out / 'carved' / 'mp4' / f'{stem}.reassembled.mp4'
+            out_mp4.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                r = carve.by_name('mp4').reassemble(f, g, off, out_mp4,
+                                                    verify=True)
+            except Exception as e:                       # noqa: BLE001
+                man.items.append(Item(path='', status='failed',
+                                      source='reassemble:mp4', offset=off,
+                                      name=name,
+                                      evidence=[f'reassembly raised {e}: '
+                                                'intermediates kept']))
+                continue
+            # engine scratch (scan cache etc.): intermediate, removed by default
+            if r.work_dir and not args.keep_intermediates:
+                import shutil
+                shutil.rmtree(r.work_dir, ignore_errors=True)
+            st = r.sample_stats
+            ok = r.status == 'complete' and st.all_ok
+            if out_mp4.exists():
+                _apply_datetime(out_mp4, dt)
+            man.items.append(Item(path=str(out_mp4) if out_mp4.exists() else '',
+                                  status='complete' if ok else r.status,
+                                  source='reassemble:mp4', offset=off,
+                                  size=r.bytes_written, name=out_mp4.name,
+                                  datetime=dt,
+                                  evidence=[f'samples: nal_ok={st.nal_ok} '
+                                            f'nal_bad={st.nal_bad} '
+                                            f'desc_ok={st.descriptors_ok} '
+                                            f'gpmd_ok={st.gpmd_ok}',
+                                            f'mapped={r.mapped_bytes}/'
+                                            f'{r.file_size}',
+                                            *r.notes],
+                                  generation='carved',
+                                  validated=('ok' if st.all_ok else 'fail')))
+            if ok:
+                covered.append((off, off + r.bytes_written))
+                if not args.keep_intermediates:
+                    for it in man.items:
+                        nm = (it.name or '').upper()
+                        if (it.path and it.name
+                                and nm.endswith(('.MP4', '.LRV'))
+                                and Path(it.name).stem == stem
+                                and it.source in ('carve:mp4', 'dir-entry')):
+                            old = Path(it.path)
+                            if old.exists() and old != out_mp4:
+                                old.unlink()
+                            it.path = ''
+                            it.status = 'superseded'
+                            it.evidence = list(it.evidence or []) + [
+                                f'intermediate removed: superseded by '
+                                f'{out_mp4.name}']
+
+        # ---- 4) container-independent H.264 media salvage ----
         # No ftyp/moov needed: validated NAL runs are frames without time.
         # Runs already inside a decode-complete MP4 are skipped (no double
         # output); window-duplicates and overlapping runs are merged away.
@@ -270,6 +364,12 @@ def cmd_extract(args) -> int:
             f.seek(a)
             chunk = f.read(b - a)
             frames = nal_annexb(chunk, MediaRun(0, len(chunk), nals, vcl))
+            # never write empty/negligible runs, and never duplicates of
+            # what a complete file already contains
+            if len(frames) < 1024:
+                continue
+            if any(frames in blob for _, blob in complete_blobs):
+                continue
             name = f'h264_run_{a:013d}.h264'
             path = out / 'carved' / 'h264' / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -360,6 +460,8 @@ def main(argv=None) -> int:
     p.add_argument('image')
     p.add_argument('-o', '--out', default='fatality-out')
     p.add_argument('--max-carve', type=int, default=10_000)
+    p.add_argument('--keep-intermediates', action='store_true',
+                   help='keep raw spans/chain dumps that reassembly supersedes')
     p.set_defaults(fn=cmd_extract)
 
     p = sub.add_parser('verify')

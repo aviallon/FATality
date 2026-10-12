@@ -64,7 +64,8 @@ def walk_atoms(data: bytes, start: int = 0, end: int | None = None,
         if size < hdr:
             break
         out.append(Atom(off=i, size=size, kind=kind, header=hdr))
-        if kind in (b'moov', b'trak', b'mdia', b'minf', b'stbl', b'udta'):
+        if kind in (b'moov', b'trak', b'mdia', b'minf', b'stbl', b'udta',
+                    b'moof', b'traf'):
             out += walk_atoms(data, i + hdr, min(i + size, end), depth + 1)
         i += size
     return out
@@ -129,11 +130,17 @@ def gp_descriptors(data: bytes, lo: int, hi: int) -> list[tuple[int, int, int]]:
 
 
 def nal_walk_ok(sample: bytes) -> bool:
-    """AVCC: 4-byte lengths chain exactly to the sample size."""
+    """AVCC/HEVC: 4-byte lengths chain exactly to the sample size."""
     i, n = 0, len(sample)
     while i + 4 <= n:
         ln = struct.unpack('>I', sample[i:i + 4])[0]
         if ln == 0 or i + 4 + ln > n:
+            return False
+        h0 = sample[i + 4] if i + 4 < n else 0
+        h1 = sample[i + 5] if i + 5 < n else 0
+        avc_ok = not (h0 & 0x80) and 1 <= (h0 & 0x1F) <= 24
+        hevc_ok = not (h0 & 0x80) and ((h0 >> 1) & 0x3F) <= 40 and not (h1 & 0x80)
+        if not (avc_ok or hevc_ok):
             return False
         i += 4 + ln
     return i == n
@@ -216,6 +223,83 @@ def samples_intact(data: bytes, info: dict[str, Any]) -> tuple[bool, int, int]:
     return ok == len(chosen) and ok > 0, ok, len(chosen)
 
 
+def _ranges_intact(data: bytes, ranges: list[tuple[int, int]]) -> tuple[bool, int, int]:
+    ok = 0
+    for off, sz in ranges:
+        if off < 0 or off + sz > len(data):
+            continue
+        if nal_walk_ok(data[off:off + sz]):
+            ok += 1
+    return ok == len(ranges) and ok > 0, ok, len(ranges)
+
+
+def moof_traf_ranges(data: bytes, moof: Atom) -> list[list[tuple[int, int]]]:
+    """Per-traf sample byte ranges of one fMP4 fragment (trun-expanded).
+
+    Fragmented MP4 (phone screen recordings, DASH captures) carries its
+    sample tables in moof/traf/trun, not moov/stco.  Layout rules honoured:
+    tfhd base_data_offset > default-base-is-moof (moof start) > file start;
+    trun data_offset adds to the base; per-sample sizes override the
+    tfhd default.
+    """
+    out: list[list[tuple[int, int]]] = []
+    for traf in walk_atoms(data, moof.off, moof.off + moof.size):
+        if traf.kind != b'traf':
+            continue
+        base = moof.off
+        default_size = 0
+        truns: list[tuple[int, int, list[int]]] = []   # (data_offset, count, sizes)
+        for t in walk_atoms(data, traf.off, traf.off + traf.size):
+            body = t.off + t.header
+            if t.kind == b'tfhd':
+                flags = int.from_bytes(data[body + 1:body + 4], 'big')
+                p = body + 4 + 4                       # vf + track_id
+                if flags & 0x000001:
+                    base = struct.unpack('>Q', data[p:p + 8])[0]
+                    p += 8
+                elif flags & 0x020000:
+                    base = moof.off                    # default-base-is-moof
+                if flags & 0x000002:
+                    p += 4
+                if flags & 0x000008:
+                    p += 4
+                if flags & 0x000010:
+                    default_size = struct.unpack('>I', data[p:p + 4])[0]
+            elif t.kind == b'trun':
+                flags = int.from_bytes(data[body + 1:body + 4], 'big')
+                count = struct.unpack('>I', data[body + 4:body + 8])[0]
+                p = body + 8
+                data_off = 0
+                if flags & 0x000001:
+                    data_off = struct.unpack('>i', data[p:p + 4])[0]
+                    p += 4
+                if flags & 0x000004:
+                    p += 4
+                sizes: list[int] = []
+                for _ in range(count):
+                    if flags & 0x000100:
+                        p += 4
+                    sz = default_size
+                    if flags & 0x000200:
+                        sz = struct.unpack('>I', data[p:p + 4])[0]
+                        p += 4
+                    if flags & 0x000400:
+                        p += 4
+                    if flags & 0x000800:
+                        p += 4
+                    sizes.append(sz)
+                truns.append((data_off, count, sizes))
+        ranges: list[tuple[int, int]] = []
+        for data_off, _count, sizes in truns:
+            pos = base + data_off
+            for sz in sizes:
+                ranges.append((pos, sz))
+                pos += sz
+        if ranges:
+            out.append(ranges)
+    return out
+
+
 class Mp4Handler(Handler):
     name = 'mp4'
     signature = b'ftyp'
@@ -284,26 +368,44 @@ class Mp4Handler(Handler):
             descs = gp_descriptors(data, mdats[0].off, min(total, mdats[0].off + mdats[0].size))
             res.extras['gp_descriptors'] = len(descs)
             res.notes.append(f'{len(descs)} GoPro sample descriptors in mdat')
-        if moovs and mdats and not res.damage:
-            intact, ok, cnt = samples_intact(data, info if moovs else {})
-            # cross-validate container bounds against the file's own sample
-            # tables: a damaged mdat size field can inflate the span to the
-            # whole image and must never claim bytes (or suppress salvage)
-            declared = mdats[0].size
-            tables = sum(sz for _, sz in sample_ranges(info))
-            consistent = abs(declared - tables) <= max(1 << 20, tables // 10)
-            if not consistent:
-                res.notes.append(f'mdat size {declared} inconsistent with '
-                                 f'sample tables {tables}: bounds unknown, '
-                                 'metadata only')
-            elif intact:
-                res.status = 'complete'
+        moofs = [a for a in atoms if a.kind == b'moof']
+        if (moovs or moofs) and mdats and not res.damage:
+            if moofs:
+                # fragmented MP4 (screen recordings, DASH): sample tables
+                # live in moof/traf/trun, not moov/stco
+                trafs = [r for m in moofs for r in moof_traf_ranges(data, m)]
+                best = max(trafs, key=lambda rs: sum(sz for _, sz in rs),
+                           default=[])
+                intact, ok, cnt = _ranges_intact(data, best)
+                res.notes.append(f'fMP4: {len(trafs)} fragment track tables')
+                if intact:
+                    res.status = 'complete'
+                    res.notes.append(f'{ok}/{cnt} video samples NAL-validated')
+                else:
+                    res.notes.append(f'sample bytes do not validate ({ok}/{cnt}): '
+                                     'fragmented span, media salvage instead')
                 res.extras['bytes'] = data[:total]
-                res.notes.append(f'{ok}/{cnt} video samples NAL-validated')
             else:
-                res.notes.append(f'sample bytes do not validate ({ok}/{cnt}): '
-                                 'fragmented span, media salvage instead')
-                res.extras['bytes'] = data[:total]
+                intact, ok, cnt = samples_intact(data, info)
+                # cross-validate container bounds against the file's own
+                # sample tables: a damaged mdat size field can inflate the
+                # span to the whole image and must never claim bytes (or
+                # suppress salvage)
+                declared = mdats[0].size
+                tables = sum(sz for _, sz in sample_ranges(info))
+                consistent = abs(declared - tables) <= max(1 << 20, tables // 10)
+                if not consistent:
+                    res.notes.append(f'mdat size {declared} inconsistent with '
+                                     f'sample tables {tables}: bounds unknown, '
+                                     'metadata only')
+                elif intact:
+                    res.status = 'complete'
+                    res.extras['bytes'] = data[:total]
+                    res.notes.append(f'{ok}/{cnt} video samples NAL-validated')
+                else:
+                    res.notes.append(f'sample bytes do not validate ({ok}/{cnt}): '
+                                     'fragmented span, media salvage instead')
+                    res.extras['bytes'] = data[:total]
         else:
             res.notes.append('moov/mdat incomplete or unverified: metadata only')
         return res

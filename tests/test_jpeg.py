@@ -88,3 +88,14 @@ def test_broken_jpeg_still_attaches_embedded_preview(tmp_path):
     poff, plen = previews[0]
     assert poff == 6 and plen == len(thumb)   # after SOI(2) + APP1 hdr(4)
     assert res.extras['bytes'][poff:poff + plen] == thumb
+
+
+def test_tiny_eoi_junk_is_not_a_jpeg(tmp_path):
+    """A 4-byte SOI..EOI in entropy data is a false positive, not salvage."""
+    h = JpegHandler()
+    junk = b'\xff\xd8\xff\xd9' + bytes(range(256)) * 8
+    p = tmp_path / 'in.bin'
+    p.write_bytes(junk)
+    with open(p, 'rb') as f:
+        res = h.extract(f, 0)
+    assert res.status == 'phantom'

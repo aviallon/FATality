@@ -43,6 +43,10 @@ class Handler:
     def validate(self, path: str) -> Validation:
         raise NotImplementedError
 
+    def reassemble(self, f, gz, off: int, out_path, verify: bool = True):
+        """Optional engine hook (e.g. fragmented MP4 reassembly)."""
+        raise NotImplementedError
+
 
 _REGISTRY: list[Handler] = []
 
